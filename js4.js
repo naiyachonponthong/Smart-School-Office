@@ -703,7 +703,7 @@ function loadFilesList(category) {
   FilesState.category = category || '';
   document.getElementById('filesSection').innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
 
-  apiCall('getFilesList', category)
+  apiCall('getFilesList', { category })
       .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       FilesState.folders = res.folders || [];

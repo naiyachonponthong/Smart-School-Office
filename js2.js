@@ -1781,7 +1781,7 @@ function confirmImportStudentsCSV(records) {
   }).then(c => {
     if (!c.isConfirmed) return;
     showLoading('กำลังนำเข้า...');
-    apiCall('importStudentsCSV', records)
+    apiCall('importStudentsCSV', { records: JSON.stringify(records) })
         .then(res => {
         hideLoading();
         if (res.status === 'success') {
@@ -2013,7 +2013,7 @@ function confirmImportPersonnelCSV(records) {
   }).then(c => {
     if (!c.isConfirmed) return;
     showLoading('กำลังนำเข้า...');
-    apiCall('importPersonnelCSV', records)
+    apiCall('importPersonnelCSV', { records: JSON.stringify(records) })
         .then(res => {
         hideLoading();
         if (res.status === 'success') {

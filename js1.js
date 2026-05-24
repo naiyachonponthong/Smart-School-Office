@@ -28,9 +28,10 @@ async function apiCall(action, data = {}, token = null) {
   params.append('action', action);
   const t = token || APP.token;
   if (t) params.append('token', t);
-  // flatten data into query params
-  Object.keys(data).forEach(k => {
-    const v = data[k];
+  // If data is a primitive (string/number), treat as { id: data }
+  const d = (data !== null && (typeof data === 'string' || typeof data === 'number')) ? { id: data } : (data || {});
+  Object.keys(d).forEach(k => {
+    const v = d[k];
     if (v !== undefined && v !== null) {
       params.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
     }
