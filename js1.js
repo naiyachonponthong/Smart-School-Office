@@ -24,14 +24,18 @@ const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbxre2CucgJflBkCIz4
  * token:  session token (optional, ถ้าไม่ใส่จะใช้ APP.token)
  */
 async function apiCall(action, data = {}, token = null) {
-  const payload = { action, data };
+  const params = new URLSearchParams();
+  params.append('action', action);
   const t = token || APP.token;
-  if (t) payload.token = t;
-  const res = await fetch(API_BASE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+  if (t) params.append('token', t);
+  // flatten data into query params
+  Object.keys(data).forEach(k => {
+    const v = data[k];
+    if (v !== undefined && v !== null) {
+      params.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+    }
   });
+  const res = await fetch(API_BASE_URL + '?' + params.toString());
   return res.json();
 }
 
