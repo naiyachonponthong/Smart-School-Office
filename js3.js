@@ -588,6 +588,7 @@ function recalcGradeRow(i) {
   let pct = null;
   if (!isNaN(att) && !isNaN(tot) && tot > 0) pct = Math.round((att / tot) * 1000) / 10;
   const pctEl = get('pct');
+  if (!pctEl) return;
   pctEl.textContent = (pct === null) ? '-' : pct + '%';
   pctEl.className = 'grade-output g-pct ' + (pct === null ? '' : (pct < 80 ? 'grade-fail' : 'grade-pass'));
 

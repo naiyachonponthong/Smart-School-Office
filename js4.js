@@ -384,10 +384,12 @@ function loadCalendarEvents() {
 }
 
 function renderCalendarGrid() {
+  const calLabel = document.getElementById('calMonthLabel');
+  if (!calLabel) return;
   const y = CalendarState.year, m = CalendarState.month;
   const thaiMonths = ['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
                      'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-  document.getElementById('calMonthLabel').textContent = thaiMonths[m] + ' ' + (y + 543);
+  calLabel.textContent = thaiMonths[m] + ' ' + (y + 543);
 
   const first = new Date(y, m - 1, 1);
   const daysInMonth = new Date(y, m, 0).getDate();
