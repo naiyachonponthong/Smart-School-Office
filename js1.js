@@ -662,7 +662,8 @@ async function handleImageUpload(inputEl, category, callback) {
   try {
     const result = await uploadFileToGAS(file, category);
     hideLoading();
-    showToast('success', 'อัพโหลดสำเร็จ');
+    // ไม่ showToast ตรงนี้ — Swal toast จะ close main Swal dialog ทำให้ isConfirmed=false
+    // แต่ละ callback ทำ visual feedback เอง (เปลี่ยนสีปุ่ม/icon ✅)
     if (callback) callback(result.view_url, result.file_id, result);
   } catch (err) {
     hideLoading();
