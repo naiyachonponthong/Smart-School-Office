@@ -606,7 +606,7 @@ function deleteStudent(id) {
 
 function exportStudents() {
   showLoading('กำลังเตรียมไฟล์...');
-  apiCall('exportData', 'students')
+  apiCall('exportData', { type: 'students' })
       .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
@@ -1114,7 +1114,7 @@ function deletePersonnelConfirm(id) {
 
 function exportPersonnel() {
   showLoading('กำลังเตรียมไฟล์...');
-  apiCall('exportData', 'personnel')
+  apiCall('exportData', { type: 'personnel' })
       .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
@@ -1274,7 +1274,7 @@ function loadAttendanceRecord() {
     AttendanceState.subject_id = subject_id;
     if (!subject_id || !date) return;
     area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
-    apiCall('getAttendanceBySubjectDate', subject_id, date)
+    apiCall('getAttendanceBySubjectDate', { subject_id, date })
         .then(res => {
         if (res.status !== 'success') { fail({ message: res.message }); return; }
         AttendanceState.records = res.data;
@@ -1288,7 +1288,7 @@ function loadAttendanceRecord() {
     AttendanceState.classroom = classroom;
     if (!classroom || !date) return;
     area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
-    apiCall('getAttendanceByClassDate', classroom, date)
+    apiCall('getAttendanceByClassDate', { classroom, date })
         .then(res => {
         if (res.status !== 'success') { fail({ message: res.message }); return; }
         AttendanceState.records = res.data;
@@ -1601,7 +1601,7 @@ function renderAttendanceReportData(res, start, end) {
 
 function exportAttendance() {
   showLoading('กำลังเตรียมไฟล์...');
-  apiCall('exportData', 'attendance')
+  apiCall('exportData', { type: 'attendance' })
       .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
