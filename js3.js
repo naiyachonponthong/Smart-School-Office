@@ -625,7 +625,7 @@ function recalcGradeRow(i) {
 function saveGradeSheet() {
   if (!AcademicState.currentSubject || !AcademicState.gradeRows) return;
   showLoading('กำลังบันทึก...');
-  apiCall('saveGradeBulk', AcademicState.currentSubject.id, AcademicState.gradeRows)
+  apiCall('saveGradeBulk', { subject_id: AcademicState.currentSubject.id, records: JSON.stringify(AcademicState.gradeRows) })
       .then(res => {
       hideLoading();
       if (res.status === 'success') Swal.fire({ icon:'success', title:'สำเร็จ', text:res.message, timer:1800 });
@@ -637,7 +637,7 @@ function saveGradeSheet() {
 function printPP5() {
   if (!AcademicState.currentSubject) return showToast('warning', 'เลือกวิชาก่อน');
   showLoading('กำลังเตรียมเอกสาร...');
-  apiCall('generatePP5HTML', AcademicState.currentSubject.id)
+  apiCall('generatePP5HTML', { id: AcademicState.currentSubject.id })
       .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
@@ -742,7 +742,7 @@ function renderGpaList(students) {
 function viewGPA(studentId) {
   const year = document.getElementById('gpaYear').value || null;
   showLoading('กำลังคำนวณ...');
-  apiCall('calculateGPA', { studentId, year })
+  apiCall('calculateGPA', { studentId, year: document.getElementById('gpaYear').value || '' })
     .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
@@ -859,7 +859,7 @@ function renderFinance(container) {
 }
 
 function loadFinanceSummary() {
-  apiCall('getFinanceSummary', null, null)
+  apiCall('getFinanceSummary')
       .then(res => {
       if (res.status !== 'success') return;
       document.getElementById('financeStats').innerHTML = `
@@ -1762,7 +1762,7 @@ function reviewApprovalDlg(id, action) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
-    apiCall('reviewApproval', id, action, r.value || '')
+    apiCall('reviewApproval', { id, action, comment: r.value || '' })
         .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadApprovals(); }
