@@ -1,0 +1,710 @@
+/* ============================================================
+ *  Smart School Office — js1
+ *  Part 1: Auth | Session | Navigation | Dashboard | Upload
+ * ============================================================ */
+
+/* ---------- Global State ---------- */
+const APP = {
+  token: null,
+  user : null,
+  role : null,
+  config: null,
+  currentPage: 'dashboard',
+  charts: {},
+  dashboardData: null
+};
+
+/* ---------- API Config ---------- */
+const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbxre2CucgJflBkCIz4jrNlVFPr4_r_TQVitVmf2KqAj1NOK6Gaf7C0jDp18sM3PRN-5/exec';
+
+/**
+ * ส่ง request ไปยัง Apps Script JSON API
+ * action: ชื่อ function ใน routeApi
+ * data:   object ของ parameters (optional)
+ * token:  session token (optional, ถ้าไม่ใส่จะใช้ APP.token)
+ */
+async function apiCall(action, data = {}, token = null) {
+  const payload = { action, data };
+  const t = token || APP.token;
+  if (t) payload.token = t;
+  const res = await fetch(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+
+/* ============================================================
+ *  Boot
+ * ============================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+  const saved = sessionStorage.getItem('sso_token') || localStorage.getItem('sso_token');
+  if (saved) {
+    APP.token = saved;
+    showLoading('กำลังตรวจสอบการเข้าสู่ระบบ...');
+    apiCall('validateSession', {}, saved)
+      .then(handleSessionCheck)
+      .catch(() => { hideLoading(); showLoginScreen(); });
+  } else {
+    showLoginScreen();
+  }
+});
+
+function handleSessionCheck(res) {
+  hideLoading();
+  if (res && res.valid) {
+    APP.user = res.user;
+    APP.role = res.role;
+    enterApp();
+  } else {
+    sessionStorage.removeItem('sso_token');
+    localStorage.removeItem('sso_token');
+    showLoginScreen();
+  }
+}
+
+
+/* ============================================================
+ *  Login Screen
+ * ============================================================ */
+function showLoginScreen() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appLayout').style.display   = 'none';
+  setTimeout(() => document.getElementById('loginUsername').focus(), 200);
+}
+
+function switchLoginTab(tab) {
+  document.getElementById('tabAdmin').classList.toggle('active', tab === 'admin');
+  document.getElementById('tabStaff').classList.toggle('active', tab === 'staff');
+  if (tab === 'admin') {
+    document.getElementById('loginUsername').placeholder = 'ชื่อผู้ใช้งาน Admin';
+  } else {
+    document.getElementById('loginUsername').placeholder = 'ชื่อผู้ใช้งาน Staff/ครู';
+  }
+  document.getElementById('loginUsername').focus();
+}
+
+function togglePassword() {
+  const inp = document.getElementById('loginPassword');
+  const icn = document.getElementById('pwdIcon');
+  if (inp.type === 'password') { inp.type = 'text';     icn.className = 'bx bx-hide'; }
+  else                          { inp.type = 'password'; icn.className = 'bx bx-show'; }
+}
+
+function doLogin() {
+  const u = document.getElementById('loginUsername').value.trim();
+  const p = document.getElementById('loginPassword').value;
+  const remember = document.getElementById('rememberMe').checked;
+
+  if (!u || !p) {
+    return showToast('warning', 'กรุณากรอกข้อมูลให้ครบถ้วน');
+  }
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px;">\x3c/div> กำลังตรวจสอบ...';
+
+  apiCall('login', { username: u, password: p })
+    .then(res => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bx bx-log-in-circle">\x3c/i> เข้าสู่ระบบ';
+
+      if (res.status !== 'success') {
+        return Swal.fire({
+          icon: 'error',
+          title: 'เข้าสู่ระบบไม่สำเร็จ',
+          text: res.message || 'รหัสผ่านไม่ถูกต้อง',
+          confirmButtonText: 'ตกลง'
+        });
+      }
+      APP.token = res.token;
+      APP.user  = res.user;
+      APP.role  = res.user.role;
+      (remember ? localStorage : sessionStorage).setItem('sso_token', res.token);
+      enterApp();
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bx bx-log-in-circle">\x3c/i> เข้าสู่ระบบ';
+      Swal.fire({ icon:'error', title:'เกิดข้อผิดพลาด', text: err.message || err });
+    });
+}
+
+function forgotPassword() {
+  Swal.fire({
+    icon: 'info',
+    title: 'ลืมรหัสผ่าน',
+    html: 'กรุณาติดต่อผู้ดูแลระบบ<br>หรือ Reset รหัสผ่านในหน้าตั้งค่า',
+    confirmButtonText: 'ตกลง'
+  });
+}
+
+
+/* ============================================================
+ *  Logout
+ * ============================================================ */
+function doLogout() {
+  Swal.fire({
+    title: 'ต้องการออกจากระบบหรือไม่?',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'ออกจากระบบ',
+    cancelButtonText : 'ยกเลิก',
+    confirmButtonColor: '#EF4444'
+  }).then(r => {
+    if (!r.isConfirmed) return;
+    showLoading('กำลังออกจากระบบ...');
+    apiCall('logout')
+      .then(() => {
+        hideLoading();
+        sessionStorage.removeItem('sso_token');
+        localStorage.removeItem('sso_token');
+        APP.token = null; APP.user = null; APP.role = null;
+        showLoginScreen();
+      })
+      .catch(() => { hideLoading(); showLoginScreen(); });
+  });
+}
+
+
+/* ============================================================
+ *  Enter App
+ * ============================================================ */
+function enterApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appLayout').style.display   = 'flex';
+
+  // ผู้ใช้
+  document.getElementById('sidebarUserName').textContent = APP.user.name || APP.user.username;
+  document.getElementById('sidebarUserRole').textContent =
+    ({ admin:'ผู้ดูแลระบบ', staff:'เจ้าหน้าที่', teacher:'ครู' })[APP.role] || APP.role;
+
+  const av = document.getElementById('sidebarAvatar');
+  if (APP.user.avatar) {
+    av.style.backgroundImage = 'url(' + APP.user.avatar + ')';
+    av.textContent = '';
+  } else {
+    av.textContent = (APP.user.name || APP.user.username || 'U').charAt(0).toUpperCase();
+  }
+
+  // ซ่อนเมนู admin ถ้าไม่ใช่ admin
+  const isAdmin = APP.role === 'admin';
+  document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
+  document.getElementById('adminDivider').style.display = isAdmin ? '' : 'none';
+  document.getElementById('adminLabel').style.display   = isAdmin ? '' : 'none';
+
+  // ซ่อนเมนู staff-only ถ้าเป็นครู
+  const isStaffOrAdmin = APP.role === 'admin' || APP.role === 'staff';
+  document.querySelectorAll('.staff-only').forEach(el => el.style.display = isStaffOrAdmin ? '' : 'none');
+
+  navigate('dashboard');
+  refreshBadges();
+  setInterval(refreshBadges, 60000);
+}
+
+
+/* ============================================================
+ *  Navigation
+ * ============================================================ */
+function navigate(page) {
+  APP.currentPage = page;
+
+  // active state
+  document.querySelectorAll('.menu-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+
+  const titles = {
+    dashboard: 'หน้าหลัก',
+    students: 'ข้อมูลนักเรียน',
+    classroom_mgmt: 'จัดการห้องเรียน',
+    behavior: 'พฤติกรรมนักเรียน',
+    student_card: 'บัตรนักเรียน',
+    qr_attendance: 'เช็คชื่อ QR Code',
+    personnel: 'ครูและบุคลากร',
+    attendance: 'การเข้าเรียน',
+    academic: 'งานวิชาการ',
+    registration: 'งานทะเบียน',
+    finance: 'งานการเงิน',
+    documents: 'สารบรรณโรงเรียน',
+    approvals: 'ระบบอนุมัติ',
+    calendar: 'ปฏิทินและข่าวสาร',
+    files: 'คลังไฟล์',
+    reports: 'รายงาน',
+    users: 'จัดการผู้ใช้งาน',
+    settings: 'ตั้งค่าระบบ',
+    schedule: 'ตารางสอน',
+    manual  : 'คู่มือการใช้งาน'
+  };
+  document.getElementById('pageTitle').textContent = titles[page] || 'หน้าหลัก';
+
+  toggleSidebar(false);
+
+  // ทำลาย charts เดิม
+  Object.keys(APP.charts).forEach(k => {
+    try { APP.charts[k].destroy(); } catch(_){}
+    delete APP.charts[k];
+  });
+
+  // route
+  const content = document.getElementById('pageContent');
+  switch (page) {
+    case 'dashboard': return renderDashboard(content);
+    case 'students':  if (typeof renderStudents  === 'function') return renderStudents(content);  break;
+    case 'classroom_mgmt': if (typeof renderClassroomMgmt === 'function') return renderClassroomMgmt(content); break;
+    case 'behavior':  if (typeof renderBehavior  === 'function') return renderBehavior(content);  break;
+    case 'student_card': if (typeof renderStudentCard === 'function') return renderStudentCard(content); break;
+    case 'qr_attendance': if (typeof renderQRAttendance === 'function') return renderQRAttendance(content); break;
+    case 'personnel': if (typeof renderPersonnel === 'function') return renderPersonnel(content); break;
+    case 'attendance':if (typeof renderAttendance=== 'function') return renderAttendance(content); break;
+    case 'academic':  if (typeof renderAcademic  === 'function') return renderAcademic(content);  break;
+    case 'registration': if (typeof renderRegistration === 'function') return renderRegistration(content); break;
+    case 'finance':   if (typeof renderFinance   === 'function') return renderFinance(content);   break;
+    case 'documents': if (typeof renderDocuments === 'function') return renderDocuments(content); break;
+    case 'approvals': if (typeof renderApprovals === 'function') return renderApprovals(content); break;
+    case 'calendar':  if (typeof renderCalendar  === 'function') return renderCalendar(content);  break;
+    case 'files':     if (typeof renderFiles     === 'function') return renderFiles(content);     break;
+    case 'reports':   if (typeof renderReports   === 'function') return renderReports(content);   break;
+    case 'users':     if (typeof renderUsers     === 'function') return renderUsers(content);     break;
+    case 'settings':  if (typeof renderSettings  === 'function') return renderSettings(content);  break;
+    case 'schedule':  if (typeof renderSchedule  === 'function') return renderSchedule(content);  break;
+    case 'manual':    if (typeof renderManual    === 'function') return renderManual(content);    break;
+  }
+  // ถ้าไม่มี renderer ใน Part นี้ → แสดง placeholder
+  renderComingSoon(content, titles[page] || page);
+}
+
+function renderComingSoon(container, label) {
+  container.innerHTML = `
+    <div class="coming-soon">
+      <i class='bx bx-rocket'>\x3c/i>
+      <h3>หน้า "${label}" กำลังพัฒนาในส่วนถัดไป\x3c/h3>
+      <p>ฟีเจอร์นี้จะเปิดใช้งานใน Part ถัดไป กลับสู่หน้าหลักเพื่อใช้งานต่อ\x3c/p>
+      <button class="btn btn-blue mt-4" onclick="navigate('dashboard')">
+        <i class='bx bx-home-alt'>\x3c/i> กลับหน้าหลัก
+      \x3c/button>
+    \x3c/div>`;
+}
+
+function toggleSidebar(open) {
+  const sb = document.getElementById('sidebar');
+  const bd = document.getElementById('sidebarBackdrop');
+  if (open === true)  { sb.classList.add('open');    bd.classList.add('show'); return; }
+  if (open === false) { sb.classList.remove('open'); bd.classList.remove('show'); return; }
+  sb.classList.toggle('open');
+  bd.classList.toggle('show');
+}
+
+
+/* ============================================================
+ *  Dashboard
+ * ============================================================ */
+function renderDashboard(container) {
+  container.innerHTML = `
+    <div class="welcome-row">
+      <div>
+        <h1>สวัสดีค่ะ, ${escapeHTML(APP.user.name || APP.user.username)}\x3c/h1>
+        <div class="sub">
+          <i class='bx bxs-school'>\x3c/i>
+          <span id="schoolNameDash">โรงเรียน...\x3c/span>
+          <span class="mx-1">·\x3c/span>
+          <span>ภาพรวมการบริหารจัดการ\x3c/span>
+        \x3c/div>
+      \x3c/div>
+      <div class="date-pill">
+        <i class='bx bx-calendar'>\x3c/i>
+        <span id="todayLabel">\x3c/span>
+      \x3c/div>
+    \x3c/div>
+
+    <div class="stat-grid">
+      <div class="stat-card s1">
+        <div class="icon-wrap"><i class='bx bxs-user-detail'>\x3c/i>\x3c/div>
+        <div class="label">นักเรียนทั้งหมด\x3c/div>
+        <div class="value" id="statStudents">—\x3c/div>
+        <div class="trend"><i class='bx bx-up-arrow-alt'>\x3c/i> ภาคเรียนปัจจุบัน\x3c/div>
+      \x3c/div>
+      <div class="stat-card s2">
+        <div class="icon-wrap"><i class='bx bxs-group'>\x3c/i>\x3c/div>
+        <div class="label">ครูและบุคลากร\x3c/div>
+        <div class="value" id="statPersonnel">—\x3c/div>
+        <div class="trend"><i class='bx bx-up-arrow-alt'>\x3c/i> สถานะปฏิบัติงาน\x3c/div>
+      \x3c/div>
+      <div class="stat-card s3">
+        <div class="icon-wrap"><i class='bx bxs-check-circle'>\x3c/i>\x3c/div>
+        <div class="label">อัตราการเข้าเรียน\x3c/div>
+        <div class="value" id="statAttendance">—\x3c/div>
+        <div class="trend"><i class='bx bx-calendar-check'>\x3c/i> สถิติวันนี้\x3c/div>
+      \x3c/div>
+      <div class="stat-card s4">
+        <div class="icon-wrap"><i class='bx bxs-wallet'>\x3c/i>\x3c/div>
+        <div class="label">คงเหลือในบัญชี\x3c/div>
+        <div class="value" id="statBalance">—\x3c/div>
+        <div class="trend"><i class='bx bx-trending-up'>\x3c/i> รายรับ - รายจ่าย\x3c/div>
+      \x3c/div>
+    \x3c/div>
+
+    <div class="dash-row">
+      <div class="dash-card">
+        <h3>
+          สถิติการเข้าเรียนรายสัปดาห์
+          <a href="#" onclick="event.preventDefault(); navigate('attendance');">ดูทั้งหมด <i class='bx bx-chevron-right'>\x3c/i>\x3c/a>
+        \x3c/h3>
+        <div class="chart-box"><canvas id="chartAttendance">\x3c/canvas>\x3c/div>
+      \x3c/div>
+
+      <div class="dash-card">
+        <h3>ประกาศล่าสุด\x3c/h3>
+        <div class="announce-list" id="announceList">
+          <div class="empty-state"><i class='bx bx-loader-alt bx-spin'>\x3c/i>กำลังโหลด...\x3c/div>
+        \x3c/div>
+      \x3c/div>
+
+      <div class="dash-card">
+        <h3>สรุปรายรับ - รายจ่าย\x3c/h3>
+        <div class="chart-box" style="height:170px;"><canvas id="chartFinance">\x3c/canvas>\x3c/div>
+        <div class="text-center mt-2">
+          <div class="text-xs text-slate-500">คงเหลือสุทธิ\x3c/div>
+          <div class="text-lg font-bold text-blue-600" id="netBalance">฿0\x3c/div>
+        \x3c/div>
+      \x3c/div>
+    \x3c/div>
+  `;
+
+  // วันที่ภาษาไทย
+  document.getElementById('todayLabel').textContent = formatThaiDate(new Date());
+
+  loadDashboardData();
+}
+
+function loadDashboardData() {
+  apiCall('getDashboardData')
+    .then(res => {
+      if (res.status !== 'success') {
+        return showToast('error', res.message || 'โหลดข้อมูลไม่สำเร็จ');
+      }
+      APP.dashboardData = res.data;
+      renderDashboardData(res.data);
+    })
+    .catch(err => showToast('error', err.message || err));
+}
+
+function renderDashboardData(d) {
+  // ชื่อโรงเรียน
+  const schoolName = d.config.school_name || 'โรงเรียน...';
+  document.getElementById('schoolNameDash').textContent = schoolName;
+  document.getElementById('brandSchoolName').textContent = schoolName;
+
+  // Stats
+  document.getElementById('statStudents').textContent   = formatNumber(d.stats.students);
+  document.getElementById('statPersonnel').textContent  = formatNumber(d.stats.personnel);
+  document.getElementById('statAttendance').textContent = d.stats.attendance_pct.toFixed(1) + '%';
+  document.getElementById('statBalance').textContent    = formatMoney(d.stats.balance);
+
+  // Chart: เข้าเรียน 7 วัน
+  const ctxA = document.getElementById('chartAttendance');
+  if (ctxA) {
+    APP.charts.attendance = new Chart(ctxA, {
+      type: 'line',
+      data: {
+        labels: d.week_chart.map(x => x.label),
+        datasets: [{
+          label: 'อัตราการเข้าเรียน (%)',
+          data: d.week_chart.map(x => x.pct),
+          borderColor: '#3B82F6',
+          backgroundColor: 'rgba(59,130,246,.15)',
+          fill: true, tension: 0.4,
+          pointBackgroundColor: '#1E40AF', pointRadius: 4,
+          borderWidth: 3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { min: 0, max: 100, ticks: { stepSize: 25, callback: v => v + '%' }, grid:{ color:'#F1F5F9' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // Chart: การเงิน
+  const ctxF = document.getElementById('chartFinance');
+  if (ctxF) {
+    APP.charts.finance = new Chart(ctxF, {
+      type: 'doughnut',
+      data: {
+        labels: ['รายรับ', 'รายจ่าย'],
+        datasets: [{
+          data: [d.finance.income || 0, d.finance.expense || 0],
+          backgroundColor: ['#10B981', '#EF4444'],
+          borderWidth: 0, hoverOffset: 8
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '70%',
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'Sarabun', size: 12 }, padding: 12, boxWidth: 12 } },
+          tooltip: { callbacks: { label: c => c.label + ': ' + formatMoney(c.parsed) } }
+        }
+      }
+    });
+  }
+  document.getElementById('netBalance').textContent = formatMoney(d.stats.balance);
+
+  // ประกาศ
+  const list = document.getElementById('announceList');
+  if (!d.announcements || d.announcements.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <i class='bx bx-news'>\x3c/i>
+        ยังไม่มีประกาศ
+      \x3c/div>`;
+  } else {
+    list.innerHTML = d.announcements.slice(0,4).map(a => `
+      <div class="announce-item">
+        <div class="icn"><i class='bx bxs-megaphone'>\x3c/i>\x3c/div>
+        <div style="flex:1; min-width:0;">
+          <div class="title">${escapeHTML(a.title || '(ไม่มีหัวข้อ)')}\x3c/div>
+          <div class="meta">${formatThaiDate(new Date(a.created_at || a.start_date))}\x3c/div>
+        \x3c/div>
+      \x3c/div>
+    `).join('');
+  }
+
+  // Sidebar badge
+  if (d.pending_approvals > 0) {
+    document.getElementById('badgeApprovals').textContent = d.pending_approvals;
+    document.getElementById('badgeApprovals').style.display = '';
+    document.getElementById('topbarDot').style.display = '';
+  }
+}
+
+function refreshBadges() {
+  if (!APP.token) return;
+  apiCall('getSidebarBadges')
+    .then(res => {
+      if (res.status !== 'success') return;
+      const badge = document.getElementById('badgeApprovals');
+      const dot   = document.getElementById('topbarDot');
+      if (res.pending_approvals > 0) {
+        badge.textContent = res.pending_approvals;
+        badge.style.display = '';
+        dot.style.display = '';
+      } else {
+        badge.style.display = 'none';
+        dot.style.display = 'none';
+      }
+    })
+    .catch(() => {});
+}
+
+
+/* ============================================================
+ *  Profile (Mini)
+ * ============================================================ */
+function openProfile() {
+  Swal.fire({
+    title: 'โปรไฟล์ผู้ใช้งาน',
+    html: `
+      <div style="text-align:left; font-size:14px; padding: 8px 4px;">
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #E2E8F0;">
+          <div class="avatar-circle" style="width:60px;height:60px;border-radius:50%;font-size:24px;
+            ${APP.user.avatar ? `background-image:url(${APP.user.avatar});` : ''}">
+            ${APP.user.avatar ? '' : (APP.user.name || APP.user.username || 'U').charAt(0).toUpperCase()}
+          \x3c/div>
+          <div>
+            <div style="font-weight:700;font-size:16px;">${escapeHTML(APP.user.name || '-')}\x3c/div>
+            <div style="color:#64748B;font-size:13px;">${escapeHTML(APP.user.username)}\x3c/div>
+          \x3c/div>
+        \x3c/div>
+        <div style="display:grid; grid-template-columns:auto 1fr; gap:8px 14px; color:#334155;">
+          <span style="color:#64748B;">บทบาท:\x3c/span>
+          <span><span class="status-badge status-active">${({admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',teacher:'ครู'})[APP.role] || APP.role}\x3c/span>\x3c/span>
+          <span style="color:#64748B;">อีเมล:\x3c/span>      <span>${escapeHTML(APP.user.email || '-')}\x3c/span>
+          <span style="color:#64748B;">โทรศัพท์:\x3c/span>   <span>${escapeHTML(APP.user.phone || '-')}\x3c/span>
+          <span style="color:#64748B;">ฝ่าย/กลุ่ม:\x3c/span> <span>${escapeHTML(APP.user.department || '-')}\x3c/span>
+        \x3c/div>
+      \x3c/div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: '<i class="bx bx-lock-alt">\x3c/i> เปลี่ยนรหัสผ่าน',
+    cancelButtonText : 'ปิด',
+    customClass: { confirmButton: 'swal2-confirm' }
+  }).then(r => {
+    if (r.isConfirmed) openChangePassword();
+  });
+}
+
+function openChangePassword() {
+  Swal.fire({
+    title: 'เปลี่ยนรหัสผ่าน',
+    html: `
+      <div style="text-align:left; padding: 4px;">
+        <div style="margin-bottom:10px;">
+          <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;color:#334155;">รหัสผ่านเดิม\x3c/label>
+          <input type="password" id="oldPwd" class="swal2-input" style="margin:0;width:100%;font-family:inherit;" />
+        \x3c/div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;color:#334155;">รหัสผ่านใหม่ (≥ 6 ตัว)\x3c/label>
+          <input type="password" id="newPwd" class="swal2-input" style="margin:0;width:100%;font-family:inherit;" />
+        \x3c/div>
+        <div>
+          <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;color:#334155;">ยืนยันรหัสผ่านใหม่\x3c/label>
+          <input type="password" id="newPwd2" class="swal2-input" style="margin:0;width:100%;font-family:inherit;" />
+        \x3c/div>
+      \x3c/div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: 'บันทึก',
+    cancelButtonText : 'ยกเลิก',
+    preConfirm: () => {
+      const o = document.getElementById('oldPwd').value;
+      const n = document.getElementById('newPwd').value;
+      const n2= document.getElementById('newPwd2').value;
+      if (!o || !n) { Swal.showValidationMessage('กรอกข้อมูลให้ครบ'); return false; }
+      if (n.length < 6) { Swal.showValidationMessage('รหัสใหม่อย่างน้อย 6 ตัว'); return false; }
+      if (n !== n2) { Swal.showValidationMessage('รหัสยืนยันไม่ตรงกัน'); return false; }
+      return { o, n };
+    }
+  }).then(r => {
+    if (!r.isConfirmed) return;
+    showLoading('กำลังเปลี่ยนรหัสผ่าน...');
+    apiCall('changeOwnPassword', { old_password: r.value.o, new_password: r.value.n })
+      .then(res => {
+        hideLoading();
+        if (res.status === 'success') Swal.fire({ icon:'success', title:'สำเร็จ', text: res.message, timer: 1800 });
+        else Swal.fire({ icon:'error', title:'ไม่สำเร็จ', text: res.message });
+      })
+      .catch(err => { hideLoading(); Swal.fire({ icon:'error', title:'ผิดพลาด', text: err.message || err }); });
+  });
+}
+
+
+/* ============================================================
+ *  Upload Helpers (ใช้ได้ทุก Part)
+ * ============================================================ */
+async function uploadFileToGAS(file, category) {
+  return new Promise((resolve, reject) => {
+    if (file.size > 8 * 1024 * 1024) return reject(new Error('ไฟล์ใหญ่เกิน 8MB'));
+
+    if (file.type.startsWith('image/')) {
+      compressImage(file, 800, 0.7, (base64) => {
+        sendToGAS(base64, file.name, 'image/jpeg', category || 'general', resolve, reject);
+      });
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64 = e.target.result.split(',')[1];
+        sendToGAS(base64, file.name, file.type || 'application/octet-stream', category || 'general', resolve, reject);
+      };
+      reader.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้'));
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+function compressImage(file, maxWidth, quality, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ratio  = Math.min(maxWidth / img.width, 1);
+      canvas.width  = Math.round(img.width  * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      callback(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
+    };
+    img.onerror = () => callback(e.target.result.split(',')[1]);
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function sendToGAS(base64, fileName, mimeType, category, resolve, reject) {
+  apiCall('uploadFile', { base64, fileName, mimeType, category })
+    .then(res => {
+      if (res.status === 'success') resolve(res);
+      else reject(new Error(res.message || 'อัพโหลดไม่สำเร็จ'));
+    })
+    .catch(err => reject(err));
+}
+
+/**
+ * ใช้ใน HTML:  <input type="file" onchange="handleImageUpload(this, 'students', cb)">
+ * cb(viewUrl, fileId)
+ */
+async function handleImageUpload(inputEl, category, callback) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  showLoading('กำลังอัพโหลด...');
+  try {
+    const result = await uploadFileToGAS(file, category);
+    hideLoading();
+    showToast('success', 'อัพโหลดสำเร็จ');
+    if (callback) callback(result.view_url, result.file_id, result);
+  } catch (err) {
+    hideLoading();
+    showToast('error', 'อัพโหลดไม่สำเร็จ: ' + (err.message || err));
+  }
+  inputEl.value = '';
+}
+
+
+/* ============================================================
+ *  UI Helpers
+ * ============================================================ */
+function showLoading(text) {
+  document.getElementById('loadingText').textContent = text || 'กำลังโหลด...';
+  document.getElementById('loadingOverlay').classList.add('show');
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.remove('show');
+}
+
+function showToast(icon, title) {
+  Swal.fire({
+    toast: true, position: 'top-end',
+    icon: icon, title: title,
+    showConfirmButton: false, timer: 2500, timerProgressBar: true
+  });
+}
+
+
+/* ============================================================
+ *  Formatters / Escapers
+ * ============================================================ */
+function escapeHTML(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/\x3c/g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function formatNumber(n) {
+  return Number(n || 0).toLocaleString('en-US');
+}
+function formatMoney(n) {
+  const v = Number(n || 0);
+  return '฿' + v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+function formatThaiDate(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  if (isNaN(d.getTime())) return '-';
+  const m = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+             'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  return d.getDate() + ' ' + m[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+}
+function formatThaiDateShort(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  if (isNaN(d.getTime())) return '-';
+  const m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.',
+             'ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return d.getDate() + ' ' + m[d.getMonth()] + ' ' + ((d.getFullYear() + 543) % 100);
+}

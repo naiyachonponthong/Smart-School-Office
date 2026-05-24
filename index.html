@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart School Office</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- SweetAlert2 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- QRCode.js — สร้าง QR บัตรนักเรียน -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+  <!-- JsBarcode — สร้าง Barcode บัตรนักเรียน -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+  <!-- Html5-QrCode — สแกน QR เช็คชื่อ -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!-- Boxicons (แทน Flaticon ที่ต้อง download) -->
+  <link href='https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ================== Loading Overlay ================== -->
+  <div id="loadingOverlay">
+    <div class="spinner-card">
+      <div class="spinner"></div>
+      <span id="loadingText">กำลังโหลด...</span>
+    </div>
+  </div>
+
+
+  <!-- ================== Login Screen ================== -->
+  <div id="loginScreen">
+    <div class="login-card">
+
+      <div class="login-logo">
+        <i class='bx bxs-graduation'></i>
+      </div>
+
+      <div class="text-center mb-6">
+        <h1 class="text-2xl font-bold text-slate-800 mb-1">Smart School Office</h1>
+        <p class="text-sm text-slate-500">ระบบบริหารจัดการโรงเรียน</p>
+      </div>
+
+      <div class="tab-pill">
+        <button id="tabAdmin" class="active" onclick="switchLoginTab('admin')">
+          <i class='bx bx-shield-quarter mr-1'></i> ผู้ดูแลระบบ
+        </button>
+        <button id="tabStaff" onclick="switchLoginTab('staff')">
+          <i class='bx bx-user mr-1'></i> Staff / ครู
+        </button>
+      </div>
+
+      <form id="loginForm" onsubmit="event.preventDefault(); doLogin();">
+
+        <div class="input-wrap">
+          <i class='bx bx-user'></i>
+          <input type="text" id="loginUsername" placeholder="ชื่อผู้ใช้งาน" autocomplete="username" required>
+        </div>
+
+        <div class="input-wrap">
+          <i class='bx bx-lock-alt'></i>
+          <input type="password" id="loginPassword" placeholder="รหัสผ่าน" autocomplete="current-password" required>
+          <button type="button" class="toggle-pwd" onclick="togglePassword()">
+            <i class='bx bx-show' id="pwdIcon"></i>
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between text-sm mb-5">
+          <label class="flex items-center gap-2 cursor-pointer text-slate-600">
+            <input type="checkbox" id="rememberMe" class="rounded border-slate-300">
+            จดจำการเข้าสู่ระบบ
+          </label>
+          <a href="#" onclick="event.preventDefault(); forgotPassword();" class="text-blue-600 hover:underline">ลืมรหัสผ่าน?</a>
+        </div>
+
+        <button type="submit" class="btn-primary" id="loginBtn">
+          <i class='bx bx-log-in-circle'></i>
+          เข้าสู่ระบบ
+        </button>
+
+        <div class="text-center text-xs text-slate-400 mt-6">
+          เริ่มต้นใช้งาน: <span class="font-semibold text-slate-600">admin / Admin@2024</span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ================== Main App (ซ่อนจนกว่าจะ Login) ================== -->
+  <div id="appLayout" class="layout" style="display:none;">
+
+    <!-- Sidebar Backdrop (มือถือ) -->
+    <div id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+
+      <div class="sidebar-header">
+        <div class="logo-box">
+          <i class='bx bxs-graduation'></i>
+        </div>
+        <div>
+          <div class="brand">Smart School Office</div>
+          <div class="brand-sub" id="brandSchoolName">โรงเรียน...</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-menu" id="sidebarMenu">
+        <button class="menu-item active" data-page="dashboard" onclick="navigate('dashboard')">
+          <i class='bx bxs-home-alt-2'></i> หน้าหลัก
+        </button>
+        <button class="menu-item" data-page="students" onclick="navigate('students')">
+          <i class='bx bxs-user-detail'></i> ข้อมูลนักเรียน
+        </button>
+        <button class="menu-item" data-page="classroom_mgmt" onclick="navigate('classroom_mgmt')">
+          <i class='bx bxs-school'></i> จัดการห้องเรียน
+        </button>
+        <button class="menu-item" data-page="behavior" onclick="navigate('behavior')">
+          <i class='bx bxs-heart'></i> พฤติกรรมนักเรียน
+        </button>
+        <button class="menu-item" data-page="student_card" onclick="navigate('student_card')">
+          <i class='bx bxs-id-card'></i> บัตรนักเรียน
+        </button>
+        <button class="menu-item" data-page="qr_attendance" onclick="navigate('qr_attendance')">
+          <i class='bx bx-qr-scan'></i> เช็คชื่อ QR Code
+        </button>
+        <button class="menu-item staff-only" data-page="personnel" onclick="navigate('personnel')">
+          <i class='bx bxs-group'></i> ครูและบุคลากร
+        </button>
+        <button class="menu-item" data-page="attendance" onclick="navigate('attendance')">
+          <i class='bx bxs-check-square'></i> การเข้าเรียน
+        </button>
+        <button class="menu-item" data-page="academic" onclick="navigate('academic')">
+          <i class='bx bxs-book-content'></i> งานวิชาการ
+        </button>
+        <button class="menu-item" data-page="schedule" onclick="navigate('schedule')">
+          <i class='bx bxs-calendar-check'></i> ตารางสอน
+        </button>
+        <button class="menu-item staff-only" data-page="registration" onclick="navigate('registration')">
+          <i class='bx bxs-id-card'></i> งานทะเบียน
+        </button>
+        <button class="menu-item staff-only" data-page="finance" onclick="navigate('finance')">
+          <i class='bx bxs-wallet'></i> งานการเงิน
+        </button>
+        <button class="menu-item staff-only" data-page="documents" onclick="navigate('documents')">
+          <i class='bx bxs-envelope'></i> สารบรรณโรงเรียน
+        </button>
+        <button class="menu-item" data-page="approvals" onclick="navigate('approvals')">
+          <i class='bx bxs-badge-check'></i> ระบบอนุมัติ
+          <span class="badge" id="badgeApprovals" style="display:none;">0</span>
+        </button>
+        <button class="menu-item" data-page="calendar" onclick="navigate('calendar')">
+          <i class='bx bxs-calendar-event'></i> ปฏิทินและข่าวสาร
+        </button>
+        <button class="menu-item" data-page="files" onclick="navigate('files')">
+          <i class='bx bxs-folder'></i> คลังไฟล์
+        </button>
+        <button class="menu-item" data-page="reports" onclick="navigate('reports')">
+          <i class='bx bxs-bar-chart-alt-2'></i> รายงาน
+        </button>
+
+        <div class="menu-divider" id="adminDivider"></div>
+        <div class="menu-section-label" id="adminLabel">สำหรับผู้ดูแล</div>
+
+        <button class="menu-item admin-only" data-page="users" onclick="navigate('users')">
+          <i class='bx bxs-user-account'></i> จัดการผู้ใช้งาน
+        </button>
+        <button class="menu-item admin-only" data-page="settings" onclick="navigate('settings')">
+          <i class='bx bxs-cog'></i> ตั้งค่าระบบ
+        </button>
+
+        <div class="menu-divider"></div>
+        <button class="menu-item" data-page="manual" onclick="navigate('manual')">
+          <i class='bx bxs-book-reader'></i> คู่มือการใช้งาน
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="avatar avatar-circle" id="sidebarAvatar">A</div>
+        <div class="who">
+          <div class="name" id="sidebarUserName">ผู้ใช้งาน</div>
+          <div class="role" id="sidebarUserRole">บทบาท</div>
+        </div>
+        <button class="logout-btn" onclick="doLogout()" title="ออกจากระบบ">
+          <i class='bx bx-log-out'></i>
+        </button>
+      </div>
+    </aside>
+
+
+    <!-- Main -->
+    <div class="main">
+
+      <!-- Topbar -->
+      <header class="topbar">
+        <button class="menu-toggle" onclick="toggleSidebar(true)">
+          <i class='bx bx-menu'></i>
+        </button>
+        <div class="page-title" id="pageTitle">หน้าหลัก</div>
+        <div class="actions">
+          <button class="icon-btn" onclick="openProfile()" title="โปรไฟล์">
+            <i class='bx bx-user-circle'></i>
+          </button>
+          <button class="icon-btn" onclick="navigate('calendar')" title="แจ้งเตือน">
+            <i class='bx bx-bell'></i>
+            <span class="dot" id="topbarDot" style="display:none;"></span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <main class="content" id="pageContent">
+        <!-- โหลด dashboard เริ่มต้นที่นี่ -->
+      </main>
+
+    </div>
+
+  </div>
+
+
+  <!-- ================== Scripts ================== -->
+  <script src="js1.js"></script>
+  <script src="js2.js"></script>
+  <script src="js3.js"></script>
+  <script src="js4.js"></script>
+  <script src="js_schedule.js"></script>
+  <script src="js_classroom.js"></script>
+  <script src="js_behavior.js"></script>
+  <script src="js_student_card.js"></script>
+  <script src="js_qr_attendance.js"></script>
+  <script src="js_line_oa.js"></script>
+  <script src="js_manual.js"></script>
+
+</body>
+</html>
