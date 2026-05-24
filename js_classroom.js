@@ -118,7 +118,7 @@ function openClassroomForm(id) {
   const currentYear = CLS.academicYear || config.academic_year || (new Date().getFullYear() + 543);
 
   // โหลดครูสำหรับ dropdown
-  apiCall('saveClassroom', res.value)
+  apiCall('getPersonnel', { type:'teacher', per_page:200 })
     .then(res => {
       const teachers = (res.status === 'success') ? res.data : [];
       CLS.teachers = teachers;
@@ -206,17 +206,16 @@ function openClassroomForm(id) {
       }).then(res => {
         if (!res.isConfirmed) return;
         showLoading('กำลังบันทึก...');
-        apiCall('catch', err => { hideLoading(); showToast('error', err.message||err); });
-      });
-    })
-    .withFailureHandler(() => CLS.teachers = [])
-    .getPersonnel({ type:'teacher', per_page:200 })
-    .then(r => {
+        apiCall('saveClassroom', res.value)
+          .then(r => {
             hideLoading();
             if (r.status === 'success') { showToast('success', r.message); loadClassroomList(); }
             else Swal.fire({ icon:'error', title:'ผิดพลาด', text: r.message });
           })
-    .catch(() => {});
+          .catch(err => { hideLoading(); showToast('error', err.message||err); });
+      });
+    })
+    .catch(() => { CLS.teachers = []; });
 }
 
 function filterTeacherDropdown(q) {
@@ -246,7 +245,7 @@ function selectTeacher(id, name) {
 /* ---------- รายชื่อนักเรียนในห้อง ---------- */
 function openClassroomStudents(roomId, roomName, ay) {
   showLoading('กำลังโหลด...');
-  apiCall('getClassroomStudents', roomName, ay)
+  apiCall('getClassroomStudents', { classroomName: roomName, academic_year: ay })
     .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
@@ -374,7 +373,7 @@ function openTransferDialog(fromRoom, ay) {
   }).then(res => {
     if (!res.isConfirmed) return;
     showLoading('กำลังย้าย...');
-    apiCall('transferStudents', selectedIds, res.value)
+    apiCall('transferStudents', { studentIds: JSON.stringify(selectedIds), targetRoom: res.value })
     .then(r => {
         hideLoading();
         if (r.status === 'success') {
@@ -401,7 +400,7 @@ function deleteClassroomConfirm(id, name) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังลบ...');
-    apiCall('deleteClassroom', id)
+    apiCall('deleteClassroom', { id })
     .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadClassroomList(); }
