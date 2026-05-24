@@ -633,7 +633,17 @@ function compressImage(file, maxWidth, quality, callback) {
 }
 
 function sendToGAS(base64, fileName, mimeType, category, resolve, reject) {
-  apiCall('uploadFile', { base64, fileName, mimeType, category })
+  // Use POST with text/plain (simple request — no CORS preflight) for large base64 payloads
+  fetch(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({
+      action: 'uploadFile',
+      token: APP.token,
+      data: { base64, fileName, mimeType, category }
+    })
+  })
+    .then(r => r.json())
     .then(res => {
       if (res.status === 'success') resolve(res);
       else reject(new Error(res.message || 'อัพโหลดไม่สำเร็จ'));
