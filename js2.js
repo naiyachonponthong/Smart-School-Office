@@ -188,12 +188,12 @@ function loadStudents() {
       academic_year: StudentsState.academic_year,
       status: StudentsState.status
     })
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       StudentsState.data = res;
       renderStudentsTable(res);
     })
-    .catch(err => showToast('error', err.message || err));
+      .catch(err => showToast('error', err.message || err));
 }
 
 function renderStudentsTable(res) {
@@ -288,22 +288,27 @@ function renderStudentsTable(res) {
 
 function openStudentForm(id) {
   // โหลด classroom list ก่อนเปิดฟอร์มเสมอ
-  apiCall('getClassroomsForDropdown', APP.token);
+  apiCall('getClassroomsForDropdown')
+      .then(res => {
+      window._classroomOptions = (res.status === 'success') ? res.data : [];
+      _openStudentFormAfterLoad(id);
+    })
+      .catch(() => {
+      window._classroomOptions = [];
+      _openStudentFormAfterLoad(id);
+    });
 }
 
 function _openStudentFormAfterLoad(id) {
   if (id) {
     showLoading('กำลังโหลดข้อมูล...');
-    apiCall('withFailureHandler', err => { hideLoading(); showToast('error', err.message || err); })
-      .getStudentById(id)
-    .then(res => {
-      window._classroomOptions = (res.status === 'success') ? res.data : [];
-      _openStudentFormAfterLoad(id);
-    })
-    .catch(() => {
-      window._classroomOptions = [];
-      _openStudentFormAfterLoad(id);
-    });
+    apiCall('getStudentById', id)
+        .then(res => {
+        hideLoading();
+        if (res.status !== 'success') return showToast('error', res.message);
+        showStudentForm(res.data);
+      })
+        .catch(err => { hideLoading(); showToast('error', err.message || err); });
   } else {
     showStudentForm(null);
   }
@@ -522,7 +527,7 @@ function showStudentForm(data) {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
     apiCall('saveStudent', r.value)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           showToast('success', res.message);
@@ -531,13 +536,13 @@ function showStudentForm(data) {
           Swal.fire({ icon:'error', title:'ผิดพลาด', text: res.message });
         }
       })
-    .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message || err }); });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message || err }); });
   });
 }
 
 function viewStudent(id) {
   apiCall('getStudentById', id)
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       const s = res.data;
       Swal.fire({
@@ -570,7 +575,7 @@ function viewStudent(id) {
         showConfirmButton: false
       });
     })
-    .catch(err => showToast('error', err.message || err));
+      .catch(err => showToast('error', err.message || err));
 }
 
 function deleteStudent(id) {
@@ -586,7 +591,7 @@ function deleteStudent(id) {
     if (!r.isConfirmed) return;
     showLoading('กำลังลบ...');
     apiCall('deleteStudent', id)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           showToast('success', res.message);
@@ -595,20 +600,20 @@ function deleteStudent(id) {
           showToast('error', res.message);
         }
       })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+        .catch(err => { hideLoading(); showToast('error', err.message || err); });
   });
 }
 
 function exportStudents() {
   showLoading('กำลังเตรียมไฟล์...');
   apiCall('exportData', 'students')
-    .then(res => {
+      .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
       exportToExcel(res.headers, res.rows, 'นักเรียน_' + new Date().toISOString().slice(0,10) + '.xls');
       showToast('success', 'ดาวน์โหลดสำเร็จ');
     })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+      .catch(err => { hideLoading(); showToast('error', err.message || err); });
 }
 
 
@@ -703,12 +708,12 @@ function loadPersonnel() {
       type: PersonnelState.type,
       status: PersonnelState.status
     })
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       PersonnelState.data = res;
       renderPersonnelTable(res);
     })
-    .catch(err => showToast('error', err.message || err));
+      .catch(err => showToast('error', err.message || err));
 }
 
 function renderPersonnelTable(res) {
@@ -800,12 +805,12 @@ function openPersonnelForm(id) {
   if (id) {
     showLoading('กำลังโหลดข้อมูล...');
     apiCall('getPersonnelById', id)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status !== 'success') return showToast('error', res.message);
         showPersonnelForm(res.data);
       })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+        .catch(err => { hideLoading(); showToast('error', err.message || err); });
   } else {
     showPersonnelForm(null);
   }
@@ -1002,10 +1007,9 @@ function showPersonnelForm(data) {
     if (!r.isConfirmed) return;
     const isNew = !r.value.id;
     showLoading('กำลังบันทึก...');
-    apiCall('saveUser', { username: pid, name, role:'teacher', new_password: pw,
-                          active: true, id: null, email: r.value.email||'',
-                          phone: r.value.phone||'', department: r.value.department||'', avatar: '' })
-    .then(res => {
+    apiCall('savePersonnel', r.value, APP.token);
+  })
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           loadPersonnel();
@@ -1013,8 +1017,10 @@ function showPersonnelForm(data) {
             const pid  = res.data.personnel_id;
             const pw   = pid.length >= 6 ? pid : pid.padEnd(6, '0');
             const name = (r.value.prefix||'') + r.value.first_name + ' ' + r.value.last_name;
-            google.script.run
-              .withSuccessHandler(ur => {
+            apiCall('saveUser', { username: pid, name, role:'teacher', new_password: pw,
+                          active: true, id: null, email: r.value.email||'',
+                          phone: r.value.phone||'', department: r.value.department||'', avatar: '' })
+              .then(ur => {
                 if (ur.status === 'success') {
                   Swal.fire({ icon:'success', title:'\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e41\u0e25\u0e30\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e1a\u0e31\u0e0d\u0e0a\u0e35\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08',
                     html: `\u0e40\u0e1e\u0e34\u0e48\u0e21\u0e1a\u0e38\u0e04\u0e25\u0e32\u0e01\u0e23 <strong>${escapeHTML(name)}<\/strong> \u0e41\u0e25\u0e49\u0e27<br><br>
@@ -1025,7 +1031,7 @@ function showPersonnelForm(data) {
                   showToast('success', res.message + ' (\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e1a\u0e31\u0e0d\u0e0a\u0e35\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49: ' + ur.message + ')');
                 }
               })
-    .catch(() => showToast('success', res.message));
+              .catch(() => showToast('success', res.message));
           } else {
             showToast('success', res.message);
           }
@@ -1033,20 +1039,12 @@ function showPersonnelForm(data) {
           Swal.fire({ icon:'error', title:'\u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14', text: res.message });
         }
       })
-      .withFailureHandler(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message || err }); })
-      .savePersonnel(r.value)
-    .then(res => {
-        hideLoading();
-        if (res.status !== 'success') return showToast('error', res.message);
-        showStudentForm(res.data);
-      })
-    .catch(() => {});
-  });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message || err }); });
 }
 
 function viewPersonnel(id) {
   apiCall('getPersonnelById', id)
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       const p = res.data;
       const typeLabel = { teacher:'ครู', support:'สนับสนุน', admin:'บริหาร' };
@@ -1085,7 +1083,7 @@ function viewPersonnel(id) {
         showConfirmButton: false
       });
     })
-    .catch(err => showToast('error', err.message || err));
+      .catch(err => showToast('error', err.message || err));
 }
 
 function deletePersonnelConfirm(id) {
@@ -1101,7 +1099,7 @@ function deletePersonnelConfirm(id) {
     if (!r.isConfirmed) return;
     showLoading('กำลังลบ...');
     apiCall('deletePersonnel', id)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           showToast('success', res.message);
@@ -1110,20 +1108,20 @@ function deletePersonnelConfirm(id) {
           showToast('error', res.message);
         }
       })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+        .catch(err => { hideLoading(); showToast('error', err.message || err); });
   });
 }
 
 function exportPersonnel() {
   showLoading('กำลังเตรียมไฟล์...');
   apiCall('exportData', 'personnel')
-    .then(res => {
+      .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
       exportToExcel(res.headers, res.rows, 'บุคลากร_' + new Date().toISOString().slice(0,10) + '.xls');
       showToast('success', 'ดาวน์โหลดสำเร็จ');
     })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+      .catch(err => { hideLoading(); showToast('error', err.message || err); });
 }
 
 
@@ -1169,20 +1167,19 @@ function renderAttendance(container) {
   let loaded = 0;
   const checkReady = () => { if (++loaded >= 2) renderAttendanceRecord(); };
 
-  apiCall('getClassrooms', APP.token);
-
-  google.script.run
-    .withSuccessHandler(res => {
-      if (res.status === 'success') AttendanceState.subjects = res.data || [];
-      checkReady();
-    })
-    .withFailureHandler(() => checkReady())
-    .getSubjects({})
-    .then(res => {
+  apiCall('getClassrooms')
+      .then(res => {
       if (res.status === 'success') AttendanceState.classrooms = res.data;
       checkReady();
     })
-    .catch(() => checkReady());
+      .catch(() => checkReady());
+
+  apiCall('getSubjects', {})
+      .then(res => {
+      if (res.status === 'success') AttendanceState.subjects = res.data || [];
+      checkReady();
+    })
+      .catch(() => checkReady());
 }
 
 function switchAttendanceTab(tab) {
@@ -1278,13 +1275,13 @@ function loadAttendanceRecord() {
     if (!subject_id || !date) return;
     area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
     apiCall('getAttendanceBySubjectDate', subject_id, date)
-    .then(res => {
+        .then(res => {
         if (res.status !== 'success') { fail({ message: res.message }); return; }
         AttendanceState.records = res.data;
         AttendanceState._subject_id_save = subject_id;
         renderAttendanceList();
       })
-    .catch(fail);
+        .catch(fail);
   } else {
     const classEl = document.getElementById('attClassroom');
     const classroom = classEl ? classEl.value : AttendanceState.classroom;
@@ -1292,13 +1289,13 @@ function loadAttendanceRecord() {
     if (!classroom || !date) return;
     area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
     apiCall('getAttendanceByClassDate', classroom, date)
-    .then(res => {
+        .then(res => {
         if (res.status !== 'success') { fail({ message: res.message }); return; }
         AttendanceState.records = res.data;
         AttendanceState._subject_id_save = null;
         renderAttendanceList();
       })
-    .catch(fail);
+        .catch(fail);
   }
 }
 
@@ -1460,12 +1457,12 @@ function saveAttendance() {
     }))
   };
   apiCall('saveAttendanceBulk', payload)
-    .then(res => {
+      .then(res => {
       hideLoading();
       if (res.status === 'success') Swal.fire({ icon:'success', title:'สำเร็จ', text:res.message, timer:1800 });
       else showToast('error', res.message);
     })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+      .catch(err => { hideLoading(); showToast('error', err.message || err); });
 }
 
 
@@ -1512,14 +1509,14 @@ function loadAttendanceReport() {
   area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
 
   apiCall('getAttendanceReport', { mode:'class', classroom:classroom, start_date:start, end_date:end })
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') {
         area.innerHTML = `<div class="empty-state"><i class='bx bx-error'>\x3c/i>${escapeHTML(res.message)}\x3c/div>`;
         return;
       }
       renderAttendanceReportData(res, start, end);
     })
-    .catch(err => { area.innerHTML = `<div class="empty-state"><i class='bx bx-error'>\x3c/i>${escapeHTML(err.message||err)}\x3c/div>`; });
+      .catch(err => { area.innerHTML = `<div class="empty-state"><i class='bx bx-error'>\x3c/i>${escapeHTML(err.message||err)}\x3c/div>`; });
 }
 
 function renderAttendanceReportData(res, start, end) {
@@ -1605,13 +1602,13 @@ function renderAttendanceReportData(res, start, end) {
 function exportAttendance() {
   showLoading('กำลังเตรียมไฟล์...');
   apiCall('exportData', 'attendance')
-    .then(res => {
+      .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
       exportToExcel(res.headers, res.rows, 'การเข้าเรียน_' + new Date().toISOString().slice(0,10) + '.xls');
       showToast('success', 'ดาวน์โหลดสำเร็จ');
     })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+      .catch(err => { hideLoading(); showToast('error', err.message || err); });
 }
 
 /* ============================================================
@@ -1785,7 +1782,7 @@ function confirmImportStudentsCSV(records) {
     if (!c.isConfirmed) return;
     showLoading('กำลังนำเข้า...');
     apiCall('importStudentsCSV', records)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           Swal.fire({ icon:'success', title:'สำเร็จ', text: res.message });
@@ -1794,7 +1791,7 @@ function confirmImportStudentsCSV(records) {
           Swal.fire({ icon:'error', title:'ผิดพลาด', text: res.message });
         }
       })
-    .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message || err }); });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message || err }); });
   });
 }
 
@@ -1931,7 +1928,7 @@ function bulkCreateUsersFromPersonnel() {
     if (!r.isConfirmed) return;
     showLoading('กำลังสร้างบัญชี...');
     apiCall('createUsersFromPersonnel', r.value.role)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           Swal.fire({ icon:'success', title:'สร้างบัญชีสำเร็จ',
@@ -1940,7 +1937,7 @@ function bulkCreateUsersFromPersonnel() {
           Swal.fire({ icon:'error', text: res.message });
         }
       })
-    .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message||err }); });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message||err }); });
   });
 }
 
@@ -1992,7 +1989,7 @@ function createUserFromPersonnel(id, personnelId, name) {
     if (!r.isConfirmed) return;
     showLoading('กำลังสร้างบัญชี...');
     apiCall('saveUser', r.value)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           Swal.fire({ icon:'success', title:'สร้างบัญชีสำเร็จ',
@@ -2001,7 +1998,7 @@ function createUserFromPersonnel(id, personnelId, name) {
           Swal.fire({ icon:'error', text: res.message });
         }
       })
-    .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message||err }); });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message||err }); });
   });
 }
 
@@ -2017,7 +2014,7 @@ function confirmImportPersonnelCSV(records) {
     if (!c.isConfirmed) return;
     showLoading('กำลังนำเข้า...');
     apiCall('importPersonnelCSV', records)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           Swal.fire({ icon:'success', title:'สำเร็จ', text: res.message });
@@ -2026,6 +2023,6 @@ function confirmImportPersonnelCSV(records) {
           Swal.fire({ icon:'error', title:'ผิดพลาด', text: res.message });
         }
       })
-    .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message || err }); });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text: err.message || err }); });
   });
 }

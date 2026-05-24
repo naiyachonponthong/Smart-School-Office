@@ -161,7 +161,7 @@ function loadSchedData() {
   };
 
   apiCall('getSchedule', { academic_year:SchedState.academic_year, semester:SchedState.semester, view:'all' })
-    .then(res => {
+      .then(res => {
       if (res.status === 'success') {
         SchedState.entries    = res.data;
         SchedState.classrooms = res.classrooms;
@@ -169,23 +169,23 @@ function loadSchedData() {
       }
       check();
     })
-    .catch(() => check());
+      .catch(() => check());
 
   apiCall('getPeriodConfig', SchedState.academic_year, SchedState.semester)
-    .then(res => {
+      .then(res => {
       if (res.status === 'success') {
         SchedState.periods = res.data.periods || [];
       }
       check();
     })
-    .catch(() => check());
+      .catch(() => check());
 
-  apiCall('getRooms')
-    .then(res => {
+  apiCall('getRooms', {})
+      .then(res => {
       if (res.status === 'success') SchedState.rooms = res.data;
       check();
     })
-    .catch(() => check());
+      .catch(() => check());
 }
 
 function renderSchedTab() {
@@ -533,12 +533,12 @@ function openEntryForm(day, periodNo) {
     : [];
 
   apiCall('getSubjects', { page:1, per_page:500 })
-    .then(res => {
+      .then(res => {
       const allSubjects = res.status === 'success' ? res.data : [];
       const relevantSubjects = allSubjects.filter(s => !s.grade_level || s.grade_level === SchedState.classroom);
       showEntryForm(day, periodNo, period, dayLabel, e, relevantSubjects, isHomeroom);
     })
-    .catch(() => showEntryForm(day, periodNo, period, dayLabel, e, [], isHomeroom));
+      .catch(() => showEntryForm(day, periodNo, period, dayLabel, e, [], isHomeroom));
 }
 
 function showEntryForm(day, periodNo, period, dayLabel, e, subjects, isHomeroom) {
@@ -647,8 +647,9 @@ function showEntryForm(day, periodNo, period, dayLabel, e, subjects, isHomeroom)
     if (r.isDenied) {
       // ลบคาบ
       showLoading('กำลังลบ...');
-      apiCall('saveScheduleEntry', r.value)
-    .then(res => {
+      apiCall('deleteScheduleEntry', SchedState.classroom, day, periodNo,
+          SchedState.academic_year, SchedState.semester)
+          .then(res => {
           hideLoading();
           if (res.status === 'success') {
             showToast('success', 'ลบคาบสำเร็จ');
@@ -660,14 +661,23 @@ function showEntryForm(day, periodNo, period, dayLabel, e, subjects, isHomeroom)
             renderClassView();
           } else showToast('error', res.message);
         })
-        .deleteScheduleEntry(SchedState.classroom, day, periodNo,
-          SchedState.academic_year, SchedState.semester, APP.token);
+          .catch(() => {});
       return;
     }
     if (!r.isConfirmed) return;
 
     showLoading('กำลังบันทึก...');
-    apiCall('join', ''),
+    apiCall('saveScheduleEntry', r.value)
+        .then(res => {
+        hideLoading();
+        if (res.status !== 'success') return Swal.fire({ icon:'error', text:res.message });
+
+        // แจ้งเตือน conflict
+        if (res.conflict_warnings && res.conflict_warnings.length > 0) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'บันทึกแล้ว — แต่มีข้อควรระวัง',
+            html: res.conflict_warnings.map(w => `<div style="font-size:13px; margin-bottom:6px;">⚠️ ${escapeHTML(w.message)}\x3c/div>`).join(''),
             confirmButtonText: 'รับทราบ'
           });
         } else {
@@ -685,7 +695,7 @@ function showEntryForm(day, periodNo, period, dayLabel, e, subjects, isHomeroom)
 
         renderClassView();
       })
-    .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
   });
 }
 
@@ -873,13 +883,8 @@ function openRoomForm(id) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
-    apiCall('savePeriodConfig', {
-      academic_year: SchedState.academic_year,
-      semester     : SchedState.semester,
-      periods      : periods,
-      work_days    : [1,2,3,4,5]
-    })
-    .then(res => {
+    apiCall('saveRoom', r.value)
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           showToast('success', res.message);
@@ -893,18 +898,7 @@ function openRoomForm(id) {
           renderRoomsTab();
         } else Swal.fire({ icon:'error', text:res.message });
       })
-      .saveRoom(r.value)
-    .then(res => {
-        hideLoading();
-        if (res.status !== 'success') return Swal.fire({ icon:'error', text:res.message });
-
-        // แจ้งเตือน conflict
-        if (res.conflict_warnings && res.conflict_warnings.length > 0) {
-          Swal.fire({
-            icon: 'warning',
-            title: 'บันทึกแล้ว — แต่มีข้อควรระวัง',
-            html: res.conflict_warnings.map(w => `<div style="font-size:13px; margin-bottom:6px;">⚠️ ${escapeHTML(w.message)}\x3c/div>`)
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
@@ -916,7 +910,7 @@ function deleteRoomConfirm(id) {
     if (!r.isConfirmed) return;
     showLoading('กำลังลบ...');
     apiCall('deleteRoom', id)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           showToast('success', res.message);
@@ -924,7 +918,7 @@ function deleteRoomConfirm(id) {
           renderRoomsTab();
         } else showToast('error', res.message);
       })
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
@@ -1067,7 +1061,20 @@ function savePeriodConfig() {
   if (periods.length === 0) return showToast('warning', 'กรุณาเพิ่มคาบเรียนอย่างน้อย 1 คาบ');
 
   showLoading('กำลังบันทึก...');
-  apiCall('catch', err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
+  apiCall('savePeriodConfig', {
+      academic_year: SchedState.academic_year,
+      semester     : SchedState.semester,
+      periods      : periods,
+      work_days    : [1,2,3,4,5]
+    })
+      .then(res => {
+      hideLoading();
+      if (res.status === 'success') {
+        SchedState.periods = res.data.periods;
+        showToast('success', res.message);
+      } else Swal.fire({ icon:'error', text:res.message });
+    })
+      .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
 }
 
 
@@ -1077,33 +1084,25 @@ function savePeriodConfig() {
 function printClassSchedule() {
   if (!SchedState.classroom) return showToast('warning', 'เลือกห้องเรียนก่อน');
   showLoading('กำลังเตรียมเอกสาร...');
-  google.script.run
-    .withSuccessHandler(res => {
+  apiCall('generateSchedulePrintHTML', SchedState.classroom, SchedState.academic_year, SchedState.semester)
+      .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
       openHTMLDocument(res.html);
     })
-    .generateSchedulePrintHTML(SchedState.classroom, SchedState.academic_year, SchedState.semester)
-    .then(res => {
-      hideLoading();
-      if (res.status === 'success') {
-        SchedState.periods = res.data.periods;
-        showToast('success', res.message);
-      } else Swal.fire({ icon:'error', text:res.message });
-    })
-    .catch(() => {});
+      .catch(() => {});
 }
 
 function printTeacherSchedule() {
   if (!SchedState.teacher_id) return showToast('warning', 'เลือกครูก่อน');
   showLoading('กำลังเตรียมเอกสาร...');
   apiCall('generateTeacherScheduleHTML', SchedState.teacher_id, SchedState.academic_year, SchedState.semester)
-    .then(res => {
+      .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
       openHTMLDocument(res.html);
     })
-    .catch(() => {});
+      .catch(() => {});
 }
 
 
@@ -1131,7 +1130,7 @@ function exportClassScheduleXLS() {
 function exportAllWorkload() {
   showLoading('กำลังคำนวณภาระงาน...');
   apiCall('getTeacherWorkload', SchedState.academic_year, SchedState.semester)
-    .then(res => {
+      .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
       const headers = ['ชื่อ-นามสกุล','ฝ่าย/กลุ่มสาระ','จำนวนคาบ/สัปดาห์','ห้องที่สอน','วิชาที่สอน'];
@@ -1142,7 +1141,7 @@ function exportAllWorkload() {
       exportToExcel(headers, rows, 'ภาระงานสอน_' + SchedState.academic_year + '_' + SchedState.semester + '.xls');
       showToast('success', 'ดาวน์โหลดสำเร็จ');
     })
-    .catch(() => {});
+      .catch(() => {});
 }
 
 
@@ -1151,12 +1150,7 @@ function exportAllWorkload() {
  * ============================================================ */
 function openConflictReport() {
   showLoading('กำลังตรวจสอบ...');
-  apiCall('join', '')}
-          \x3c/div>
-        `
-      });
-    })
-    .getAllConflicts(SchedState.academic_year, SchedState.semester)
+  apiCall('getAllConflicts', { academic_year: SchedState.academic_year, semester: SchedState.semester })
     .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
@@ -1181,7 +1175,11 @@ function openConflictReport() {
                 \x3c/div>
                 <div style="font-size:13px; color:#78350F; margin-top:4px;">${escapeHTML(c.message)}\x3c/div>
               \x3c/div>
-            `)
+            `).join('')}
+          \x3c/div>
+        `
+      });
+    })
     .catch(() => {});
 }
 
@@ -1256,12 +1254,12 @@ function openCopyScheduleDlg() {
     }
     showLoading('กำลัง Copy...');
     apiCall('copyScheduleSemester', d.fromYear, d.fromSem, d.toYear, d.toSem)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') Swal.fire({ icon:'success', title:'สำเร็จ', text:res.message });
         else Swal.fire({ icon:'error', text:res.message });
       })
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
@@ -1283,7 +1281,7 @@ function clearClassScheduleConfirm() {
     if (!r.isConfirmed) return;
     showLoading('กำลังล้าง...');
     apiCall('clearClassroomSchedule', SchedState.classroom, SchedState.academic_year, SchedState.semester)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           showToast('success', res.message);
@@ -1291,6 +1289,6 @@ function clearClassScheduleConfirm() {
           renderClassView();
         } else showToast('error', res.message);
       })
-    .catch(() => {});
+        .catch(() => {});
   });
 }

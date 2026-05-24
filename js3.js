@@ -66,16 +66,11 @@ function renderAcademic(container) {
   `;
 
   // โหลด teachers สำหรับ dropdown
-  apiCall('getSubjects', {
-      page: AcademicState.page,
-      search: AcademicState.search,
-      subject_group: AcademicState.subject_group,
-      grade_level: AcademicState.grade_level
-    })
-    .then(res => {
+  apiCall('getTeachersForDropdown')
+      .then(res => {
       if (res.status === 'success') AcademicState.teachers = res.data;
     })
-    .getTeachersForDropdown(APP.token);
+      .catch(() => {});
 
   renderAcademicSubjects();
 }
@@ -145,7 +140,18 @@ function loadSubjects() {
   const area = document.getElementById('subjectsTable');
   if (area) area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
 
-  apiCall('catch', err => showToast('error', err.message || err));
+  apiCall('getSubjects', {
+      page: AcademicState.page,
+      search: AcademicState.search,
+      subject_group: AcademicState.subject_group,
+      grade_level: AcademicState.grade_level
+    })
+      .then(res => {
+      if (res.status !== 'success') return showToast('error', res.message);
+      AcademicState.data = res;
+      renderSubjectsTable(res);
+    })
+      .catch(err => showToast('error', err.message || err));
 }
 
 function renderSubjectsTable(res) {
@@ -212,12 +218,12 @@ function openSubjectForm(id) {
   if (id) {
     showLoading('กำลังโหลด...');
     apiCall('getSubjectById', id)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status !== 'success') return showToast('error', res.message);
         showSubjectForm(res.data);
       })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+        .catch(err => { hideLoading(); showToast('error', err.message || err); });
   } else {
     showSubjectForm(null);
   }
@@ -337,12 +343,12 @@ function showSubjectForm(data) {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
     apiCall('saveSubject', r.value)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadSubjects(); }
         else Swal.fire({ icon:'error', text:res.message });
       })
-    .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
   });
 }
 
@@ -355,19 +361,13 @@ function deleteSubjectConfirm(id) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังลบ...');
-    apiCall('getGradeSheet', subjectId)
-    .then(res => {
+    apiCall('deleteSubject', id)
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadSubjects(); }
         else showToast('error', res.message);
       })
-      .deleteSubject(id)
-    .then(res => {
-      if (res.status !== 'success') return showToast('error', res.message);
-      AcademicState.data = res;
-      renderSubjectsTable(res);
-    })
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
@@ -410,7 +410,12 @@ function renderAcademicGrades() {
   `;
 
   // ดึงรายวิชามาใส่ dropdown
-  apiCall('filter', Boolean))).sort().reverse();
+  apiCall('getSubjects', { page:1, per_page:200 })
+      .then(res => {
+      if (res.status !== 'success') return;
+      AcademicState.allSubjects = res.data || [];
+      // สร้าง distinct years
+      const years = Array.from(new Set(AcademicState.allSubjects.map(s => s.academic_year).filter(Boolean))).sort().reverse();
       const yrSel = document.getElementById('grYear');
       yrSel.innerHTML = '<option value="">เลือกปีการศึกษา\x3c/option>' +
         years.map(y => `<option value="${escapeHTML(y)}">${escapeHTML(y)}\x3c/option>`).join('');
@@ -422,13 +427,7 @@ function renderAcademicGrades() {
       if (curSem) semSel.value = curSem;
       onGradesFilterChange();
     })
-    .getSubjects({ page:1, per_page:200 })
-    .then(res => {
-      if (res.status !== 'success') return;
-      AcademicState.allSubjects = res.data || [];
-      // สร้าง distinct years
-      const years = Array.from(new Set(AcademicState.allSubjects.map(s => s.academic_year)
-    .catch(() => {});
+      .catch(() => {});
 }
 
 function onGradesFilterChange() {
@@ -453,7 +452,17 @@ function loadGradeSheet() {
   const area = document.getElementById('gradesArea');
   area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
 
-  apiCall('catch', err => { area.innerHTML = `<div class="empty-state"><i class='bx bx-error'>\x3c/i>${escapeHTML(err.message||err)}\x3c/div>`; });
+  apiCall('getGradeSheet', subjectId)
+      .then(res => {
+      if (res.status !== 'success') {
+        area.innerHTML = `<div class="empty-state"><i class='bx bx-error'>\x3c/i>${escapeHTML(res.message)}\x3c/div>`;
+        return;
+      }
+      AcademicState.currentSubject = res.subject;
+      AcademicState.gradeRows = res.data;
+      renderGradeSheetTable();
+    })
+      .catch(err => { area.innerHTML = `<div class="empty-state"><i class='bx bx-error'>\x3c/i>${escapeHTML(err.message||err)}\x3c/div>`; });
 }
 
 function renderGradeSheetTable() {
@@ -616,24 +625,24 @@ function saveGradeSheet() {
   if (!AcademicState.currentSubject || !AcademicState.gradeRows) return;
   showLoading('กำลังบันทึก...');
   apiCall('saveGradeBulk', AcademicState.currentSubject.id, AcademicState.gradeRows)
-    .then(res => {
+      .then(res => {
       hideLoading();
       if (res.status === 'success') Swal.fire({ icon:'success', title:'สำเร็จ', text:res.message, timer:1800 });
       else showToast('error', res.message);
     })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+      .catch(err => { hideLoading(); showToast('error', err.message || err); });
 }
 
 function printPP5() {
   if (!AcademicState.currentSubject) return showToast('warning', 'เลือกวิชาก่อน');
   showLoading('กำลังเตรียมเอกสาร...');
   apiCall('generatePP5HTML', AcademicState.currentSubject.id)
-    .then(res => {
+      .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
       openHTMLDocument(res.html);
     })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+      .catch(err => { hideLoading(); showToast('error', err.message || err); });
 }
 
 
@@ -679,8 +688,8 @@ function loadGpaStudents() {
   const area = document.getElementById('gpaArea');
   area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
 
-  apiCall('calculateGPA', studentId, year)
-    .then(res => {
+  apiCall('getStudents', { page:1, per_page:50, search: q, status:'active' })
+      .then(res => {
       if (res.status !== 'success') return;
       const yr = document.getElementById('gpaYear');
       if (res.distinct && yr.options.length <= 1) {
@@ -689,17 +698,7 @@ function loadGpaStudents() {
       }
       renderGpaList(res.data);
     })
-    .getStudents({ page:1, per_page:50, search: q, status:'active' })
-    .then(res => {
-      if (res.status !== 'success') {
-        area.innerHTML = `<div class="empty-state"><i class='bx bx-error'>\x3c/i>${escapeHTML(res.message)}\x3c/div>`;
-        return;
-      }
-      AcademicState.currentSubject = res.subject;
-      AcademicState.gradeRows = res.data;
-      renderGradeSheetTable();
-    })
-    .catch(() => {});
+      .catch(() => {});
 }
 
 function renderGpaList(students) {
@@ -742,7 +741,46 @@ function renderGpaList(students) {
 function viewGPA(studentId) {
   const year = document.getElementById('gpaYear').value || null;
   showLoading('กำลังคำนวณ...');
-  apiCall('join', '')}
+  apiCall('calculateGPA', { studentId, year })
+    .then(res => {
+      hideLoading();
+      if (res.status !== 'success') return showToast('error', res.message);
+      Swal.fire({
+        title: 'ผลการเรียน',
+        width: 720,
+        showCloseButton: true,
+        showConfirmButton: false,
+        html: `
+          <div style="text-align:left;">
+            <div class="text-center mb-4 p-4 rounded-xl" style="background:linear-gradient(135deg,#1E40AF,#3B82F6); color:white;">
+              <div class="text-xs opacity-80">เกรดเฉลี่ยสะสม (GPA)\x3c/div>
+              <div style="font-size:42px; font-weight:800; line-height:1;">${res.gpa.toFixed(2)}\x3c/div>
+              <div class="text-xs opacity-80 mt-2">หน่วยกิตรวม ${res.total_credits} หน่วยกิต\x3c/div>
+            \x3c/div>
+            <div style="max-height:380px; overflow-y:auto;">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="bg-slate-50 text-slate-600 text-xs uppercase">
+                    <th class="px-3 py-2 text-left">วิชา\x3c/th>
+                    <th class="px-3 py-2 text-center">เทอม\x3c/th>
+                    <th class="px-3 py-2 text-center">หน่วย\x3c/th>
+                    <th class="px-3 py-2 text-center">คะแนน\x3c/th>
+                    <th class="px-3 py-2 text-center">เกรด\x3c/th>
+                  \x3c/tr>
+                \x3c/thead>
+                <tbody>
+                  ${res.details.length === 0 ? `<tr><td colspan="5" class="text-center text-slate-400 py-4">ยังไม่มีคะแนน\x3c/td>\x3c/tr>` :
+                    res.details.map(d => `
+                      <tr class="border-b border-slate-100">
+                        <td class="px-3 py-2">
+                          <div class="font-mono text-xs text-slate-500">${escapeHTML(d.subject_code||'')}\x3c/div>
+                          <div>${escapeHTML(d.subject_name||'')}\x3c/div>
+                        \x3c/td>
+                        <td class="px-3 py-2 text-center text-xs">${d.semester}/${d.academic_year}\x3c/td>
+                        <td class="px-3 py-2 text-center">${d.credit}\x3c/td>
+                        <td class="px-3 py-2 text-center">${d.score_total != null ? d.score_total : '-'}\x3c/td>
+                        <td class="px-3 py-2 text-center font-semibold">${d.grade_special || (d.grade_level != null ? d.grade_level : '-')}\x3c/td>
+                      \x3c/tr>`).join('')}
                 \x3c/tbody>
               \x3c/table>
             \x3c/div>
@@ -750,14 +788,14 @@ function viewGPA(studentId) {
         `
       });
     })
-    .catch(err => { hideLoading(); showToast('error', err.message || err); });
+        .catch(err => { hideLoading(); showToast('error', err.message || err); });
 }
 
 function printPP6(studentId) {
   const year = document.getElementById('gpaYear').value || '';
   const sem  = document.getElementById('gpaSem').value || '';
   showLoading('กำลังเตรียมเอกสาร...');
-  apiCall('generatePP6HTML', studentId, sem, year)
+  apiCall('generatePP6HTML', { studentId, sem, year })
     .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
@@ -820,9 +858,8 @@ function renderFinance(container) {
 }
 
 function loadFinanceSummary() {
-  apiCall('toISOString', ).slice(0,10), payment_method:'cash' }, []))
-    .getStudents({ page:1, per_page:500, status:'active' })
-    .then(res => {
+  apiCall('getFinanceSummary', null, null)
+      .then(res => {
       if (res.status !== 'success') return;
       document.getElementById('financeStats').innerHTML = `
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -858,47 +895,7 @@ function loadFinanceSummary() {
         \x3c/style>
       `;
     })
-    .getFinanceSummary(null, null)
-    .then(res => {
-      hideLoading();
-      if (res.status !== 'success') return showToast('error', res.message);
-      Swal.fire({
-        title: 'ผลการเรียน',
-        width: 720,
-        showCloseButton: true,
-        showConfirmButton: false,
-        html: `
-          <div style="text-align:left;">
-            <div class="text-center mb-4 p-4 rounded-xl" style="background:linear-gradient(135deg,#1E40AF,#3B82F6); color:white;">
-              <div class="text-xs opacity-80">เกรดเฉลี่ยสะสม (GPA)\x3c/div>
-              <div style="font-size:42px; font-weight:800; line-height:1;">${res.gpa.toFixed(2)}\x3c/div>
-              <div class="text-xs opacity-80 mt-2">หน่วยกิตรวม ${res.total_credits} หน่วยกิต\x3c/div>
-            \x3c/div>
-            <div style="max-height:380px; overflow-y:auto;">
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="bg-slate-50 text-slate-600 text-xs uppercase">
-                    <th class="px-3 py-2 text-left">วิชา\x3c/th>
-                    <th class="px-3 py-2 text-center">เทอม\x3c/th>
-                    <th class="px-3 py-2 text-center">หน่วย\x3c/th>
-                    <th class="px-3 py-2 text-center">คะแนน\x3c/th>
-                    <th class="px-3 py-2 text-center">เกรด\x3c/th>
-                  \x3c/tr>
-                \x3c/thead>
-                <tbody>
-                  ${res.details.length === 0 ? `<tr><td colspan="5" class="text-center text-slate-400 py-4">ยังไม่มีคะแนน\x3c/td>\x3c/tr>` :
-                    res.details.map(d => `
-                      <tr class="border-b border-slate-100">
-                        <td class="px-3 py-2">
-                          <div class="font-mono text-xs text-slate-500">${escapeHTML(d.subject_code||'')}\x3c/div>
-                          <div>${escapeHTML(d.subject_name||'')}\x3c/div>
-                        \x3c/td>
-                        <td class="px-3 py-2 text-center text-xs">${d.semester}/${d.academic_year}\x3c/td>
-                        <td class="px-3 py-2 text-center">${d.credit}\x3c/td>
-                        <td class="px-3 py-2 text-center">${d.score_total != null ? d.score_total : '-'}\x3c/td>
-                        <td class="px-3 py-2 text-center font-semibold">${d.grade_special || (d.grade_level != null ? d.grade_level : '-')}\x3c/td>
-                      \x3c/tr>`)
-    .catch(() => {});
+      .catch(() => {});
 }
 
 let _finSearchTimer = null;
@@ -925,12 +922,12 @@ function loadFinanceTable() {
       page: FinanceState.page, search: FinanceState.search,
       type: FinanceState.type, start: FinanceState.start, end: FinanceState.end
     })
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       FinanceState.data = res;
       renderFinanceTable(res);
     })
-    .catch(() => {});
+      .catch(() => {});
 }
 
 function renderFinanceTable(res) {
@@ -991,10 +988,18 @@ function renderFinanceTable(res) {
 
 function openTransactionForm(type, id) {
   // ดึง student list สำหรับ reference
-  apiCall('toISOString', ).slice(0,10), payment_method:'cash' }, students);
+  apiCall('getStudents', { page:1, per_page:500, status:'active' })
+      .then(sRes => {
+      const students = (sRes.status === 'success') ? sRes.data : [];
+      if (id) {
+        // load tx existing
+        const tx = FinanceState.data.data.find(x => x.id === id);
+        showTransactionForm(tx || { type }, students);
+      } else {
+        showTransactionForm({ type, date: new Date().toISOString().slice(0,10), payment_method:'cash' }, students);
       }
     })
-    .catch(() => showTransactionForm({ type, date: new Date();
+      .catch(() => showTransactionForm({ type, date: new Date().toISOString().slice(0,10), payment_method:'cash' }, []));
 }
 
 function showTransactionForm(data, students) {
@@ -1085,7 +1090,7 @@ function showTransactionForm(data, students) {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
     apiCall('saveTransaction', r.value)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') {
           showToast('success', res.message);
@@ -1107,7 +1112,7 @@ function showTransactionForm(data, students) {
           }
         } else Swal.fire({ icon:'error', text:res.message });
       })
-    .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
   });
 }
 
@@ -1119,28 +1124,25 @@ function deleteTransactionConfirm(id) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังลบ...');
-    apiCall('generateReceiptHTML', transactionId)
-    .then(res => {
+    apiCall('deleteTransaction', id)
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadFinanceSummary(); loadFinanceTable(); }
         else showToast('error', res.message);
       })
-      .deleteTransaction(id)
-    .then(sRes => {
-      const students = (sRes.status === 'success') ? sRes.data : [];
-      if (id) {
-        // load tx existing
-        const tx = FinanceState.data.data.find(x => x.id === id);
-        showTransactionForm(tx || { type }, students);
-      } else {
-        showTransactionForm({ type, date: new Date()
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
 function printReceipt(transactionId) {
   showLoading('กำลังเตรียมใบเสร็จ...');
-  apiCall('catch', err => { hideLoading(); showToast('error', err.message || err); });
+  apiCall('generateReceiptHTML', transactionId)
+      .then(res => {
+      hideLoading();
+      if (res.status !== 'success') return showToast('error', res.message);
+      openHTMLDocument(res.html);
+    })
+      .catch(err => { hideLoading(); showToast('error', err.message || err); });
 }
 
 
@@ -1243,22 +1245,16 @@ function loadDocuments() {
   const area = document.getElementById('docTable');
   if (area) area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
 
-  apiCall('saveDocument', r.value)
-    .then(res => {
+  apiCall('getDocuments', {
+      page: DocsState.page, search: DocsState.search,
+      doc_type: DocsState.doc_type, status: DocsState.status
+    })
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       DocsState.data = res;
       renderDocumentsTable(res);
     })
-    .getDocuments({
-      page: DocsState.page, search: DocsState.search,
-      doc_type: DocsState.doc_type, status: DocsState.status
-    })
-    .then(res => {
-      hideLoading();
-      if (res.status !== 'success') return showToast('error', res.message);
-      openHTMLDocument(res.html);
-    })
-    .catch(() => {});
+      .catch(() => {});
 }
 
 function renderDocumentsTable(res) {
@@ -1434,7 +1430,13 @@ function showDocumentForm(data) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
-    apiCall('catch', err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
+    apiCall('saveDocument', r.value)
+        .then(res => {
+        hideLoading();
+        if (res.status === 'success') { showToast('success', res.message); loadDocuments(); }
+        else Swal.fire({ icon:'error', text:res.message });
+      })
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
   });
 }
 
@@ -1475,19 +1477,13 @@ function deleteDocumentConfirm(id) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังลบ...');
-    apiCall('saveApproval', r.value)
-    .then(res => {
+    apiCall('deleteDocument', id)
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadDocuments(); }
         else showToast('error', res.message);
       })
-      .deleteDocument(id)
-    .then(res => {
-        hideLoading();
-        if (res.status === 'success') { showToast('success', res.message); loadDocuments(); }
-        else Swal.fire({ icon:'error', text:res.message });
-      })
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
@@ -1569,13 +1565,13 @@ function loadApprovals() {
       page: ApprovalsState.page, search: ApprovalsState.search,
       type: ApprovalsState.type, status: ApprovalsState.status
     })
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       ApprovalsState.data = res;
       renderApprovalsTable(res);
       refreshBadges();
     })
-    .catch(() => {});
+      .catch(() => {});
 }
 
 function renderApprovalsTable(res) {
@@ -1708,7 +1704,13 @@ function openApprovalForm() {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังส่งคำขอ...');
-    apiCall('catch', err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
+    apiCall('saveApproval', r.value)
+        .then(res => {
+        hideLoading();
+        if (res.status === 'success') { showToast('success', res.message); loadApprovals(); }
+        else Swal.fire({ icon:'error', text:res.message });
+      })
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
   });
 }
 
@@ -1759,19 +1761,13 @@ function reviewApprovalDlg(id, action) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
-    apiCall('saveRegistration', r.value)
-    .then(res => {
+    apiCall('reviewApproval', id, action, r.value || '')
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadApprovals(); }
         else showToast('error', res.message);
       })
-      .reviewApproval(id, action, r.value || '')
-    .then(res => {
-        hideLoading();
-        if (res.status === 'success') { showToast('success', res.message); loadApprovals(); }
-        else Swal.fire({ icon:'error', text:res.message });
-      })
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
@@ -1836,12 +1832,12 @@ function loadRegistrations() {
   if (area) area.innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
 
   apiCall('getRegistrations', { page: RegState.page, search: RegState.search, status: RegState.status })
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       RegState.data = res;
       renderRegistrationsTable(res);
     })
-    .catch(() => {});
+      .catch(() => {});
 }
 
 function renderRegistrationsTable(res) {
@@ -2058,7 +2054,13 @@ function openRegistrationForm() {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
-    apiCall('catch', err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
+    apiCall('saveRegistration', r.value)
+        .then(res => {
+        hideLoading();
+        if (res.status === 'success') { showToast('success', res.message); loadRegistrations(); }
+        else Swal.fire({ icon:'error', text:res.message });
+      })
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
   });
 }
 
@@ -2111,19 +2113,13 @@ function approveRegConfirm(id) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังประมวลผล...');
-    google.script.run
-      .withSuccessHandler(res => {
+    apiCall('approveRegistration', id)
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { Swal.fire({ icon:'success', title:'สำเร็จ', text:res.message, timer:2000 }); loadRegistrations(); }
         else showToast('error', res.message);
       })
-      .approveRegistration(id)
-    .then(res => {
-        hideLoading();
-        if (res.status === 'success') { showToast('success', res.message); loadRegistrations(); }
-        else Swal.fire({ icon:'error', text:res.message });
-      })
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
@@ -2139,11 +2135,11 @@ function rejectRegConfirm(id) {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
     apiCall('rejectRegistration', id)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadRegistrations(); }
         else showToast('error', res.message);
       })
-    .catch(() => {});
+        .catch(() => {});
   });
 }

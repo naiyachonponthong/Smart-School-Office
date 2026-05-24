@@ -89,7 +89,12 @@ function renderReports(container) {
 }
 
 function loadReportsOverview() {
-  apiCall('getReportsOverview', APP.token);
+  apiCall('getReportsOverview')
+      .then(res => {
+      if (res.status !== 'success') return showToast('error', res.message);
+      renderReportsOverview(res.data);
+    })
+      .catch(err => showToast('error', err.message || err));
 }
 
 function renderReportsOverview(d) {
@@ -270,16 +275,14 @@ function openReportDialog(reportType, title) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังสร้างรายงาน...');
-    apiCall('toISOString', ).slice(0,10) + '.xls');
+    apiCall('generateReport', reportType, r.value)
+        .then(res => {
+        hideLoading();
+        if (res.status !== 'success') return showToast('error', res.message);
+        exportToExcel(res.headers, res.rows, res.title + '_' + new Date().toISOString().slice(0,10) + '.xls');
         showToast('success', 'ดาวน์โหลดสำเร็จ');
       })
-      .withFailureHandler(err => { hideLoading(); showToast('error', err.message || err); })
-      .generateReport(reportType, r.value)
-    .then(res => {
-      if (res.status !== 'success') return showToast('error', res.message);
-      renderReportsOverview(res.data);
-    })
-    .catch(err => showToast('error', err.message || err));
+        .catch(err => { hideLoading(); showToast('error', err.message || err); });
   });
 }
 
@@ -371,13 +374,13 @@ function calToday() {
 
 function loadCalendarEvents() {
   apiCall('getCalendarEvents', { year: CalendarState.year, month: CalendarState.month })
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       CalendarState.events = res.data || [];
       renderCalendarGrid();
       renderCalendarEventList();
     })
-    .catch(err => showToast('error', err.message || err));
+      .catch(err => showToast('error', err.message || err));
 }
 
 function renderCalendarGrid() {
@@ -637,12 +640,12 @@ function openCalendarForm(id, defaultDate) {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
     apiCall('saveCalendarEvent', r.value)
-    .then(res => {
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadCalendarEvents(); }
         else Swal.fire({ icon:'error', text:res.message });
       })
-    .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
   });
 }
 
@@ -654,18 +657,13 @@ function deleteCalendarEventConfirm(id) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังลบ...');
-    apiCall('getFilesList', category)
-    .then(res => {
+    apiCall('deleteCalendarEvent', id)
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadCalendarEvents(); }
         else showToast('error', res.message);
       })
-      .deleteCalendarEvent(id)
-    .then(res => {
-        hideLoading();
-        if (res.status !== 'success') return showToast('error', res.message);
-        exportToExcel(res.headers, res.rows, res.title + '_' + new Date()
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
@@ -703,7 +701,14 @@ function loadFilesList(category) {
   FilesState.category = category || '';
   document.getElementById('filesSection').innerHTML = '<div class="empty-state"><i class="bx bx-loader-alt bx-spin">\x3c/i>กำลังโหลด...\x3c/div>';
 
-  apiCall('catch', err => showToast('error', err.message || err));
+  apiCall('getFilesList', category)
+      .then(res => {
+      if (res.status !== 'success') return showToast('error', res.message);
+      FilesState.folders = res.folders || [];
+      FilesState.files   = res.data || [];
+      renderFilesView();
+    })
+      .catch(err => showToast('error', err.message || err));
 }
 
 function renderFilesView() {
@@ -883,20 +888,13 @@ function deleteFileConfirm(fileId, fileName) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังลบ...');
-    apiCall('saveUser', r.value)
-    .then(res => {
+    apiCall('deleteFileById', fileId)
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadFilesList(FilesState.category); }
         else showToast('error', res.message);
       })
-      .deleteFileById(fileId)
-    .then(res => {
-      if (res.status !== 'success') return showToast('error', res.message);
-      FilesState.folders = res.folders || [];
-      FilesState.files   = res.data || [];
-      renderFilesView();
-    })
-    .catch(() => {});
+        .catch(() => {});
   });
 }
 
@@ -974,12 +972,12 @@ function loadUsers() {
       page: UsersState.page, search: UsersState.search,
       role: UsersState.role, active: UsersState.active
     })
-    .then(res => {
+      .then(res => {
       if (res.status !== 'success') return showToast('error', res.message);
       UsersState.data = res;
       renderUsersTable(res);
     })
-    .catch(() => {});
+      .catch(() => {});
 }
 
 function renderUsersTable(res) {
@@ -1163,7 +1161,13 @@ function openUserForm(id) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
-    apiCall('catch', err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
+    apiCall('saveUser', r.value)
+        .then(res => {
+        hideLoading();
+        if (res.status === 'success') { showToast('success', res.message); loadUsers(); }
+        else Swal.fire({ icon:'error', text:res.message });
+      })
+        .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
   });
 }
 
@@ -1177,13 +1181,95 @@ function toggleUserActiveConfirm(id, currentActive) {
   }).then(r => {
     if (!r.isConfirmed) return;
     showLoading('กำลังบันทึก...');
-    apiCall('getSystemSettings')
-    .then(res => {
+    apiCall('toggleUserActive', id)
+        .then(res => {
         hideLoading();
         if (res.status === 'success') { showToast('success', res.message); loadUsers(); }
-        else Swal.fire({ icon:'error', text:res.message });
+        else showToast('error', res.message);
       })
-    .catch(() => {});
+        .catch(() => {});
+  });
+}
+
+function resetUserPasswordDlg(id, username) {
+  Swal.fire({
+    title: 'รีเซ็ตรหัสผ่าน',
+    html: `ผู้ใช้: <b>${username}\x3c/b>`,
+    input: 'password',
+    inputLabel: 'รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)',
+    showCancelButton: true,
+    confirmButtonText: 'รีเซ็ต',
+    cancelButtonText: 'ยกเลิก',
+    inputValidator: v => {
+      if (!v || v.length < 6) return 'รหัสผ่านอย่างน้อย 6 ตัว';
+    }
+  }).then(r => {
+    if (!r.isConfirmed) return;
+    showLoading('กำลังรีเซ็ต...');
+    apiCall('adminResetPassword', id, r.value)
+        .then(res => {
+        hideLoading();
+        if (res.status === 'success') Swal.fire({ icon:'success', title:'สำเร็จ', text:res.message });
+        else showToast('error', res.message);
+      })
+        .catch(() => {});
+  });
+}
+
+function deleteUserConfirm(id, username) {
+  Swal.fire({
+    title: 'ยืนยันการลบผู้ใช้?',
+    html: `<b>${username}\x3c/b><br><span class="text-sm text-slate-500">การกระทำนี้ไม่สามารถยกเลิกได้\x3c/span>`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'ลบ',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#EF4444'
+  }).then(r => {
+    if (!r.isConfirmed) return;
+    showLoading('กำลังลบ...');
+    apiCall('deleteUser', id)
+        .then(res => {
+        hideLoading();
+        if (res.status === 'success') { showToast('success', res.message); loadUsers(); }
+        else showToast('error', res.message);
+      })
+        .catch(() => {});
+  });
+}
+
+
+/* ============================================================
+ *  SETTINGS
+ * ============================================================ */
+function renderSettings(container) {
+  if (APP.role !== 'admin') {
+    container.innerHTML = `<div class="empty-state"><i class='bx bx-lock'>\x3c/i><h3>เฉพาะผู้ดูแลระบบเท่านั้น\x3c/h3>\x3c/div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    ${pageHeader('ตั้งค่าระบบ', 'bxs-cog', `
+      <button class="btn btn-blue" onclick="saveSettings()" id="saveSettingsBtn">
+        <i class='bx bx-save'>\x3c/i> บันทึกการตั้งค่า
+      \x3c/button>
+    `)}
+
+    <div id="settingsContent">
+      <div class="empty-state"><i class='bx bx-loader-alt bx-spin'>\x3c/i>กำลังโหลด...\x3c/div>
+    \x3c/div>
+  `;
+
+  loadSettings();
+}
+
+function loadSettings() {
+  apiCall('getSystemSettings')
+      .then(res => {
+      if (res.status !== 'success') return showToast('error', res.message);
+      renderSettingsForm(res.data);
+    })
+      .catch(err => showToast('error', err.message || err));
 }
 
 function renderSettingsForm(c) {
@@ -1391,15 +1477,8 @@ function saveSettings() {
   };
 
   showLoading('กำลังบันทึก...');
-  apiCall('withFailureHandler', err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); })
-    .saveSystemSettings(settings)
-    .then(res => {
-        hideLoading();
-        if (res.status === 'success') { showToast('success', res.message); loadUsers(); }
-        else showToast('error', res.message);
-      })
-      .toggleUserActive(id)
-    .then(res => {
+  apiCall('saveSystemSettings', settings)
+      .then(res => {
       hideLoading();
       if (res.status === 'success') {
         Swal.fire({ icon:'success', title:'บันทึกสำเร็จ', text:'การตั้งค่ามีผลทันที', timer:2000 });
@@ -1407,95 +1486,13 @@ function saveSettings() {
         Swal.fire({ icon:'error', text:res.message });
       }
     })
-    .catch(() => {});
-  });
-}
-
-function resetUserPasswordDlg(id, username) {
-  Swal.fire({
-    title: 'รีเซ็ตรหัสผ่าน',
-    html: `ผู้ใช้: <b>${username}\x3c/b>`,
-    input: 'password',
-    inputLabel: 'รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)',
-    showCancelButton: true,
-    confirmButtonText: 'รีเซ็ต',
-    cancelButtonText: 'ยกเลิก',
-    inputValidator: v => {
-      if (!v || v.length < 6) return 'รหัสผ่านอย่างน้อย 6 ตัว';
-    }
-  }).then(r => {
-    if (!r.isConfirmed) return;
-    showLoading('กำลังรีเซ็ต...');
-    apiCall('adminResetPassword', id, r.value)
-    .then(res => {
-        hideLoading();
-        if (res.status === 'success') Swal.fire({ icon:'success', title:'สำเร็จ', text:res.message });
-        else showToast('error', res.message);
-      })
-    .catch(() => {});
-  });
-}
-
-function deleteUserConfirm(id, username) {
-  Swal.fire({
-    title: 'ยืนยันการลบผู้ใช้?',
-    html: `<b>${username}\x3c/b><br><span class="text-sm text-slate-500">การกระทำนี้ไม่สามารถยกเลิกได้\x3c/span>`,
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: 'ลบ',
-    cancelButtonText: 'ยกเลิก',
-    confirmButtonColor: '#EF4444'
-  }).then(r => {
-    if (!r.isConfirmed) return;
-    showLoading('กำลังลบ...');
-    apiCall('deleteUser', id)
-    .then(res => {
-        hideLoading();
-        if (res.status === 'success') { showToast('success', res.message); loadUsers(); }
-        else showToast('error', res.message);
-      })
-    .catch(() => {});
-  });
-}
-
-
-/* ============================================================
- *  SETTINGS
- * ============================================================ */
-function renderSettings(container) {
-  if (APP.role !== 'admin') {
-    container.innerHTML = `<div class="empty-state"><i class='bx bx-lock'>\x3c/i><h3>เฉพาะผู้ดูแลระบบเท่านั้น\x3c/h3>\x3c/div>`;
-    return;
-  }
-
-  container.innerHTML = `
-    ${pageHeader('ตั้งค่าระบบ', 'bxs-cog', `
-      <button class="btn btn-blue" onclick="saveSettings()" id="saveSettingsBtn">
-        <i class='bx bx-save'>\x3c/i> บันทึกการตั้งค่า
-      \x3c/button>
-    `)}
-
-    <div id="settingsContent">
-      <div class="empty-state"><i class='bx bx-loader-alt bx-spin'>\x3c/i>กำลังโหลด...\x3c/div>
-    \x3c/div>
-  `;
-
-  loadSettings();
-}
-
-function loadSettings() {
-  google.script.run
-    .withSuccessHandler(res => {
-      if (res.status !== 'success') return showToast('error', res.message);
-      renderSettingsForm(res.data);
-    })
-    .catch(err => showToast('error', err.message || err));
+      .catch(err => { hideLoading(); Swal.fire({ icon:'error', text:err.message||err }); });
 }
 
 function showSystemInfo() {
   showLoading('กำลังโหลด...');
-  google.script.run
-    .withSuccessHandler(res => {
+  apiCall('getSystemInfo')
+    .then(res => {
       hideLoading();
       if (res.status !== 'success') return showToast('error', res.message);
       const d = res.data;
@@ -1539,6 +1536,5 @@ function showSystemInfo() {
         `
       });
     })
-    .withFailureHandler(err => { hideLoading(); showToast('error', err.message || err); })
-    .getSystemInfo(APP.token);
+    .catch(err => { hideLoading(); showToast('error', err.message || err); });
 }

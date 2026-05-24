@@ -1,4 +1,3 @@
-<script>
 /* ============================================================
  *  STUDENT CARD — บัตรนักเรียนพร้อม QR Code
  *  ใช้ Google Charts API สำหรับ QR (ไม่ต้องโหลด library)
@@ -260,4 +259,3 @@ function closePrintOverlay() {
   const o = document.getElementById('cardPrintOverlay');
   if (o) o.style.display = 'none';
 }
-</script>
