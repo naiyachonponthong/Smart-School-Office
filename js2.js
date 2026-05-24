@@ -54,11 +54,11 @@ function avatarHTML(url, name, size) {
   const baseStyle = `width:${size}px;height:${size}px;border-radius:50%;flex-shrink:0;`;
 
   if (url) {
-    // ใช้ <img> แทน background-image เพื่อหลีกเลี่ยงปัญหา CORS/redirect ของ Google Drive
-    // onerror: ถ้าโหลดรูปไม่ได้ → ซ่อน img แล้วแสดง fallback ตัวอักษรแทน
+    // Convert old uc?export=view URLs to thumbnail format (more reliable for <img> display)
+    const imgUrl = url.includes('drive.google.com/uc?') ? url.replace(/uc\?export=view&id=([^&]+).*/, 'thumbnail?id=$1&sz=w400-h400') : url;
     return `
       <div class="avatar-circle" style="${baseStyle}overflow:hidden;padding:0;position:relative;">
-        <img src="${escapeHTML(url)}"
+        <img src="${escapeHTML(imgUrl)}"
              alt="${initial}"
              style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;"
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
