@@ -182,6 +182,8 @@ function routeApi(action, params, token) {
       case 'saveApproval': return saveApproval(params.data ? (typeof params.data === 'string' ? JSON.parse(params.data) : params.data) : params, token);
       case 'reviewApproval': return reviewApproval(params.id, params.action, params.comment || '', token);
       case 'deleteApproval': return deleteApproval(params.id, token);
+      case 'getRegistrations': return getRegistrations(params, token);
+      case 'saveRegistration': return saveRegistration(params.data ? (typeof params.data === 'string' ? JSON.parse(params.data) : params.data) : params, token);
       case 'approveRegistration': return approveRegistration(params.id, token);
       case 'rejectRegistration': return rejectRegistration(params.id, token);
 
