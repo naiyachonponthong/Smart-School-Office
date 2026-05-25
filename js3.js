@@ -215,18 +215,21 @@ function renderSubjectsTable(res) {
 }
 
 function openSubjectForm(id) {
-  if (id) {
-    showLoading('กำลังโหลด...');
-    apiCall('getSubjectById', id)
-        .then(res => {
-        hideLoading();
-        if (res.status !== 'success') return showToast('error', res.message);
-        showSubjectForm(res.data);
-      })
-        .catch(err => { hideLoading(); showToast('error', err.message || err); });
-  } else {
-    showSubjectForm(null);
-  }
+  showLoading('กำลังโหลด...');
+  // โหลด classrooms + teachers + config พร้อมกันก่อนเปิด form
+  Promise.all([
+    id ? apiCall('getSubjectById', id) : Promise.resolve({ status:'success', data:null }),
+    apiCall('getClassroomsForDropdown'),
+    apiCall('getTeachersForDropdown'),
+    apiCall('getConfig')
+  ]).then(([subRes, clsRes, tchRes, cfgRes]) => {
+    hideLoading();
+    if (id && subRes.status !== 'success') return showToast('error', subRes.message);
+    AcademicState.classrooms = (clsRes.status === 'success') ? (clsRes.data || []) : [];
+    AcademicState.teachers   = (tchRes.status === 'success') ? (tchRes.data || []) : [];
+    AcademicState.academic_year = (cfgRes.status === 'success' && cfgRes.data?.academic_year) ? cfgRes.data.academic_year : (new Date().getFullYear()+543);
+    showSubjectForm(subRes.data || null);
+  }).catch(err => { hideLoading(); showToast('error', err.message || err); });
 }
 
 function showSubjectForm(data) {
@@ -272,7 +275,10 @@ function showSubjectForm(data) {
 
           <div class="col-span-4">
             <label class="form-label">ชั้น\x3c/label>
-            <input type="text" id="sf_grade_level" class="form-input" placeholder="ม.1/1" value="${escapeHTML(s.grade_level||'')}">
+            <select id="sf_grade_level" class="form-input">
+              <option value="">เลือก\x3c/option>
+              ${AcademicState.classrooms.map(c => `<option value="${escapeHTML(c)}" ${s.grade_level===c?'selected':''}>${escapeHTML(c)}\x3c/option>`).join('')}
+            \x3c/select>
           \x3c/div>
           <div class="col-span-3">
             <label class="form-label">เทอม\x3c/label>
@@ -283,7 +289,7 @@ function showSubjectForm(data) {
           \x3c/div>
           <div class="col-span-5">
             <label class="form-label">ปีการศึกษา\x3c/label>
-            <input type="text" id="sf_academic_year" class="form-input" value="${escapeHTML(s.academic_year||'')}">
+            <input type="text" id="sf_academic_year" class="form-input" value="${escapeHTML(s.academic_year || AcademicState.academic_year || '')}" readonly>
           \x3c/div>
 
           <div class="col-span-3">
